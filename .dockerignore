@@ -1,0 +1,55 @@
+# =========================================================
+# .dockerignore — 决定「哪些文件不进镜像构建上下文」
+# ---------------------------------------------------------
+# 和 .gitignore 是两件事，不要混：
+#   .gitignore     → 哪些文件不进 GitHub（data/、node_modules/、.workbuddy/）
+#   .dockerignore  → 哪些文件不进镜像（这里更多：.git、小程序端、测试脚本、文档）
+#
+# 排除掉的东西，运行时也不能依赖它 —— 每条后面写了原因。
+# =========================================================
+
+# ---------- 依赖 ----------
+# 镜像里自己 npm ci 装。绝不能把宿主机的 node_modules 拷进去：
+# Windows 上装的是 win32 版 better-sqlite3 / @node-rs/bcrypt，
+# 进 linux 容器会直接报 "invalid ELF header"。
+node_modules
+
+# ---------- 运行时数据 ----------
+# 本地演示库 + data/.session-secret（会话 / token 密钥）。
+# 镜像里不存库、不存密钥；容器启动时 server/db.js 自己建表、写种子、生成密钥。
+data
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# ---------- 版本控制与本地工具目录 ----------
+.git
+.gitignore
+.gitattributes
+.github
+.workbuddy
+
+# ---------- 部署文档与平台配置（镜像里用不到） ----------
+README.md
+DEPLOY.md
+render.yaml
+Dockerfile
+.dockerignore
+
+# ---------- 小程序端 ----------
+# 另一个客户端（微信小程序），网页服务不托管它：
+# 静态白名单只放行 9 个页面 + /assets，/miniprogram/... 本来就是 404。
+miniprogram
+
+# ---------- 本地回归脚本 ----------
+# 需要本机浏览器（Edge / CDP）与临时库，容器里跑不了，也不该占镜像体积。
+# 注意：因此镜像内 `npm run test:*` 不可用；测试请在开发机上跑。
+scripts
+
+# ---------- 环境变量与日志 ----------
+.env
+.env.*
+*.log
+npm-debug.log*
+coverage

@@ -30,7 +30,7 @@
 | 技术栈（二阶段） | Node ≥ 22 + Express 4 + better-sqlite3 + bcrypt + express-session |
 | 启动方式 | `npm install && npm start`，访问 `http://localhost:3000` |
 | 纯静态预览 | 五个展示页仍可双击直接打开（`file://`），但登录、注册、控制台必须走服务端 |
-| 云端部署 | Render 免费层（GitHub 推送自动部署），配置见 `render.yaml`，步骤见 `DEPLOY.md`（§20） |
+| 云端部署 | Koyeb 免费实例（Docker 构建、不绑卡，GitHub 推送自动部署），镜像定义见 `Dockerfile`；Render 作为备选（`render.yaml`）。步骤见 `DEPLOY.md`，取舍见 §20 |
 | 适配 | 移动端优先，断点 640 / 960 / 1200，960 以下为汉堡导航 |
 | 视觉 | 蓝白为主色、浅绿为点缀，圆角卡片 + 轻阴影 |
 
@@ -80,8 +80,10 @@ Dental Clinic/
 ├── payment.html            # 模拟支付：?appointment=<id>（第五阶段）
 ├── package.json            # 依赖与脚本（npm start / test:api / test:race / test:ui / test:e2e / test:mp / mock:mp / test:all / reset-db）
 ├── README.md               # 本文件
-├── DEPLOY.md               # 部署到 Render 的逐步说明（给第一次部署的人看，第十期）
-├── render.yaml             # Render 蓝图：服务类型 / 构建 / 启动 / 健康检查 / 环境变量
+├── DEPLOY.md               # 部署手册：Koyeb 主方案（Docker）+ Render 备选（第十/十一期）
+├── Dockerfile              # 容器镜像：node:22-slim 两段构建，Koyeb 用它构建
+├── .dockerignore           # 不进镜像的东西：node_modules / data / .git / .workbuddy / miniprogram / scripts
+├── render.yaml             # Render 蓝图（备选路线）：服务类型 / 构建 / 启动 / 健康检查 / 环境变量
 ├── server/                 # 后端（第二阶段）
 │   ├── app.js              # Express 装配：会话、静态托管、路由、错误处理
 │   ├── db.js               # SQLite 连接、建表、迁移、种子数据、参数化查询封装
@@ -1922,7 +1924,7 @@ module.exports = {
 | --- | --- | --- |
 | 开发者工具模拟器 | `http://localhost:3000`（**当前值**） | 模拟器里的 `localhost` 就是你的电脑 |
 | 手机真机调试 / 预览（同一局域网） | 电脑 WLAN 网卡的 IPv4，如 `http://192.168.1.23:3000` | 手机与电脑同一 Wi-Fi；Windows 防火墙放行 3000；仍需勾「不校验合法域名」 |
-| 部署到云端（Render）后 | `https://<服务名>.onrender.com` | **必须 HTTPS**；且真机预览要求该域名已配成「request 合法域名」——本项目不发布，所以云端地址只能在开发者工具里用（见 `DEPLOY.md` §11） |
+| 部署到云端（Koyeb）后 | `https://<服务名>-<组织>.koyeb.app` | **必须 HTTPS**；且真机预览要求该域名已配成「request 合法域名」——本项目不发布，所以云端地址只能在开发者工具里用（见 `DEPLOY.md` §10） |
 
 > 服务端 `app.listen(PORT)` 不指定 host，默认监听 `0.0.0.0`，所以内网 / 真机直连没问题——**前提是防火墙放行 3000**（Windows 首次运行 Node 时 Defender 会弹「是否允许访问网络」，点允许；当时点了取消就到「允许应用通过防火墙」里补）。改地址**不需要重启后端**，小程序端重新编译一次即可。
 >
@@ -2257,11 +2259,11 @@ JWT_SECRET=<64 位 hex> JWT_REQUIRE_ENV=1 SESSION_SECRET=<另一把 64 位 hex> 
 - 反过来也一样：换了 `JWT_SECRET` 只影响 token，不影响 cookie（两条通道的密钥材料是分开的，见上表 ①）；
 - 密钥文件属于**运行时状态**，不进版本库（`.gitignore` 已排除 `data/`）；换机器部署要么带文件，要么显式配 `JWT_SECRET` + `SESSION_SECRET`，否则所有旧凭证一并作废。这是预期行为，不是故障。
 
-**云端（Render 免费层）同理，而且更频繁：** 免费层没有持久磁盘，`data/` 整个目录都在容器里，**重启 / 重新部署 / 休眠唤醒后一律消失**。于是每次冷启动都会重新生成一把新的 `.session-secret`：
+**云端（Koyeb / Render 免费实例）同理，而且更频繁：** 免费层没有持久磁盘，`data/` 整个目录都在容器里，**重启 / 重新部署 / 休眠唤醒后一律消失**。于是每次冷启动都会重新生成一把新的 `.session-secret`：
 
 - **已登录用户会掉线，需要重新登录——这是预期行为，不是故障。** 会话 cookie 的签名密钥变了，旧 cookie 一律验不过；
 - 同一个原因，**SQLite 数据库也会被重建**（`server/db.js` 的空库自举：建表 + 5 个种子账号 + 196 个排班时段），老师每次看到的都是干净的演示数据；
-- 想让登录态跨重启保持，就在 Render 控制台配 `SESSION_SECRET` / `JWT_SECRET` 两个环境变量（各 64 位 hex），见 `DEPLOY.md` §9。
+- 想让登录态跨重启保持，就在平台控制台配 `SESSION_SECRET` / `JWT_SECRET` 两个环境变量（各 64 位 hex），见 `DEPLOY.md` §9。
 
 细节与取舍见 `DEPLOY.md` §8，本文不重复。
 
@@ -2380,64 +2382,105 @@ miniprogram/
 
 ---
 
-## 20. 部署到云端（Render 免费层）
+## 20. 部署到云端（Koyeb 免费实例 · Docker）
 
-> **怎么一步步点**写在 `DEPLOY.md`（含 git 命令、Render 控制台路径、种子账号表、常见报错）。
-> 本节只讲两件事：**代码为云端做了什么适配**、**云端和本地的行为差异**。
+> **怎么一步步点**写在 `DEPLOY.md`（Koyeb 主方案 + Render 备选，含 git 命令、控制台路径、种子账号表、常见报错）。
+> 本节只讲三件事：**镜像怎么构建**、**代码为云端做了什么适配**、**云端和本地差在哪**。
+>
+> 目标平台原定 Render，其免费层创建服务要验证信用卡、国内卡不被接受，故改用 **Koyeb 免费实例**
+> ——同一份代码，构建方式从「原生 Node」换成「Dockerfile」，`render.yaml` 保留作备选。
 
-### 20.1 为云端改的五处
+### 20.1 镜像：`Dockerfile` 两段构建
+
+| 阶段 | 内容 | 为什么 |
+| --- | --- | --- |
+| builder | `node:22-slim` + `apt-get install python3 make g++` + 先 `COPY package*.json` 再 `npm ci --omit=dev` | `better-sqlite3` 是原生模块（node-gyp / C++）：平台没有对应 Node ABI 的预编译包时要本地编译，缺 python3 / make / g++ 会直接 build 失败。先拷依赖清单再装，改 HTML / JS 不会让这层缓存失效 |
+| runtime | `node:22-slim` + `tzdata`，只拷 `node_modules` 与源码，`USER node`，`EXPOSE 8000`，`ENV NODE_ENV=production PORT=8000 TZ=Asia/Shanghai` | 镜像里不留编译器；非 root 运行；`tzdata` 是为了「今日门诊」「时段是否已过」「默认预约日期」这类按服务器本地时间算的逻辑（容器默认 UTC，国内凌晨会看到「昨天」） |
+
+- `EXPOSE 8000` 与 `ENV PORT=8000` 对齐 Koyeb 的默认端口；Koyeb 另外会把 `PORT` 注入容器，
+  代码本来就是 `Number(process.env.PORT || 3000)`，**这一行没改**。
+- **`data/` 不在镜像里**：`Dockerfile` 只做 `mkdir -p /app/data && chown node:node /app/data`。
+  容器启动时 `server/db.js` 自己建表、写种子，`.session-secret` 也生成在这个目录（跟库同目录）。
+- 写了 `HEALTHCHECK`（node 自带的 `fetch` 打 `/api/health`），给本地 `docker run` 用；
+  Koyeb 用自己的健康检查（HTTP `/api/health`）。
+
+### 20.2 `.dockerignore` 排掉什么
+
+| 排除 | 为什么 |
+| --- | --- |
+| `node_modules` | 必须在 linux 里重装：Windows 上装的 `better-sqlite3` / `@node-rs/bcrypt` 是 win32 二进制，进容器会报 `invalid ELF header` |
+| `data`、`*.db`、`*.db-wal`、`*.db-shm` | 本机演示库 + `.session-secret`，绝不进镜像 |
+| `.git`、`.github`、`.gitignore`、`.workbuddy` | 版本控制与本地日志 |
+| `miniprogram`、`scripts` | 另一个客户端；本地回归脚本要本机浏览器（Edge / CDP），容器里跑不了 |
+| `README.md`、`DEPLOY.md`、`render.yaml`、`Dockerfile`、`.dockerignore` | 文档与平台配置，运行时不读 |
+| `.env`、`.env.*`、`*.log` | 密钥与日志 |
+
+实测（按 `.dockerignore` 的语义把仓库文件过了一遍）：**必带 21 项全部保留**（9 个页面、`assets` 的关键文件、`server` 的 6 个模块、`package.json`、`package-lock.json`），**必排 10 项全部命中**（`node_modules` / `data` / `.git` / `.workbuddy` / `scripts` / `miniprogram` / 三份文档与蓝图）。
+另外在干净目录跑过 `npm ci --omit=dev`：**123 个包，5 个依赖全部 `require` 成功**（`better-sqlite3` / `@node-rs/bcrypt` / `express` / `jsonwebtoken` / `express-session`）。
+
+### 20.3 为云端改的五处（业务代码零改动）
 
 | 文件 | 改动 | 为什么必须改 |
 | --- | --- | --- |
-| `server/db.js` | 库路径改成 `DB_PATH` → `DB_FILE` → `data/app.db` 三级，相对路径按仓库根解析 | Render 用 `DB_PATH` 指定位置（`render.yaml` 里显式写了 `data/app.db`）；回归脚本继续用 `DB_FILE` 指临时库，两条互不干扰 |
-| `server/db.js` | **空库自举**（原有逻辑，未新增第二份建表/播种代码） | 免费层没有持久盘、`data/` 又不进 git，首次启动必须能自己建表 + 写种子。`CREATE ... IF NOT EXISTS` + 按邮箱/排班条数判重天然可重复执行 |
-| `server/app.js` | 生产模式 `app.set('trust proxy', 1)` | 不设的话 `req.ip` 全是 Render 代理地址：按 IP 的限流会把所有访客算成一个人（60 次/分钟全站共享），`secure` cookie 的协议判断也不准。只信一跳，不写 `true`（否则客户端可自带 `X-Forwarded-For` 伪造 IP） |
-| `server/app.js` | `.session-secret` 改为**跟随数据库目录**（默认仍是 `data/`） | 以后挂持久盘时，库和密钥在同一块盘上，不会出现「库持久、密钥在容器里」的半持久状态 |
+| `server/db.js` | 库路径改成 `DB_PATH` → `DB_FILE` → `data/app.db` 三级，相对路径按仓库根解析 | 云端用 `DB_PATH` 指定位置（Koyeb 环境变量里显式设 `data/app.db`）；回归脚本继续用 `DB_FILE` 指临时库，两条互不干扰 |
+| `server/db.js` | **空库自举**（原有逻辑，未新增第二份建表/播种代码） | 免费层没有持久盘、`data/` 又不进 git 与镜像，首次启动必须能自己建表 + 写种子。`CREATE ... IF NOT EXISTS` + 按邮箱/排班条数判重天然可重复执行 |
+| `server/app.js` | 生产模式 `app.set('trust proxy', 1)` | 不设的话 `req.ip` 全是平台代理地址：按 IP 的限流会把所有访客算成一个人（60 次/分钟全站共享），`secure` cookie 的协议判断也不准。只信一跳，不写 `true`（否则客户端可自带 `X-Forwarded-For` 伪造 IP） |
+| `server/app.js` | `.session-secret` 改为**跟随数据库目录**（默认仍是 `data/`） | 以后挂持久卷时，库和密钥在同一块盘上，不会出现「库持久、密钥在容器里」的半持久状态；容器里就是 `/app/data/.session-secret` |
 | `miniprogram/config.js`（新增） | 小程序地址从 `request.js` 挪到独立配置，`request.js` 只 `require` 它 | 换环境（本地 / 真机 / 云端）只改一行，且 `test:mp` 仍能断言「地址只有一个来源」 |
 
-另外两处是「确认无需改」而不是改：`PORT` 早就读 `process.env.PORT`（Render 注入 10000）；`package.json` 的 `engines.node` 已从 `>=22` **收紧成 `22.x`**，因为 `better-sqlite3` 是原生模块，Node 大版本跳了可能没有对应预编译包。
+另外两处是「确认无需改」而不是改：`PORT` 早就读 `process.env.PORT`（Koyeb 注入 8000）；`package.json` 的 `engines.node` 已从 `>=22` **收紧成 `22.x`**，因为 `better-sqlite3` 是原生模块，Node 大版本跳了可能没有对应预编译包。
 
-### 20.2 云端与本地不一样的地方
+### 20.4 云端与本地不一样的地方
 
-| 维度 | 本地（`npm start`） | Render 免费层 |
+| 维度 | 本地（`npm start`） | Koyeb 免费实例 |
 | --- | --- | --- |
-| 端口 | 3000 | 平台注入 `PORT`（内部 10000），代码不用改 |
-| 数据库 | `data/app.db`，长期存在 | 容器内临时文件，**重启/部署/唤醒后重建**，重新播种 |
+| 端口 | 3000 | 8000（服务里配 Port 8000，平台注入 `PORT`） |
+| 运行方式 | 直接 `node` | Docker 容器，非 root（`USER node`），根文件系统只读语义下只有 `/app/data` 可写 |
+| 数据库 | `data/app.db`，长期存在 | 容器内临时文件，**重启/重新部署/缩容唤醒后重建**，重新播种 |
 | 会话密钥 | `data/.session-secret`，长期存在 | 每次冷启动新生成 → **已登录用户掉线，需重新登录（预期）** |
-| 首次访问 | 立即响应 | 休眠 15 分钟后唤醒需 **30–60 秒** |
+| 首次访问 | 立即响应 | 缩容到 0 后唤醒需**十几秒到一分钟** |
 | 实例数 | 1 | 1（免费层），`express-session` 的 MemoryStore 够用 |
 | HTTPS | 无 | 全站 HTTPS；`NODE_ENV=production` 下 cookie 带 `Secure` |
 
-**实测（生产模式 + 模拟代理头，端口 3121 的临时实例）：**
+### 20.5 等价环境实测（模拟镜像内容，端口 8000）
+
+开发机没装 Docker，所以「镜像里跑起来是什么样」是用等价方式验的：
+按 `.dockerignore` 的规则把文件挑进一个干净目录（**没有 `data/`**）、装上干净依赖，再以容器同款环境变量启动：
 
 ```
-DB_PATH=.workbuddy/dsmoke/app.db NODE_ENV=production node server/app.js
-  数据库：D://Dental Clinic\.workbuddy\dsmoke\app.db
-  会话密钥：.workbuddy\dsmoke\.session-secret（本次新生成）   ← 跟随库目录
+PORT=8000 DB_PATH=data/app.db NODE_ENV=production TZ=Asia/Shanghai node server/app.js
+
+  刘氏口腔演示站已启动  http://localhost:8000
+  数据库：…\app\data\app.db          ← data/ 不存在也能自建（db.js 的 mkdirSync recursive）
   已创建种子账号：admin@demo.local, liu-implant@demo.local, liu-ortho@demo.local,
                   liu-general@demo.local, liu-kid@demo.local
-  已生成种子排班：196 个时段
+  已生成种子排班：196 个时段（4 位医生 × 未来 14 天）
 
-GET /api/health                 → 200 {"ok":true,"db":"app.db","users":5}
-GET /                           → 200      /README.md → 404   /miniprogram/app.js → 404
-POST /api/login（无代理头）      → 200 + token，但不下发 cookie（HTTP 下 secure cookie 不生效）
-POST /api/login（X-Forwarded-Proto: https）
-                                → Set-Cookie: lsd.sid=…; HttpOnly; Secure  ← 与 Render 上一致
-限流按转发 IP 分桶：IP A 59→58，IP B 又是 59      ← trust proxy 生效
+GET /api/health          → 200 {"ok":true,"db":"app.db","users":5}
+GET /                    → 200       /services.html → 200    /login.html → 200
+GET /payment.html        → 200       /api/public/doctors → 200（4 位）
+GET /README.md           → 404       /Dockerfile → 404
+GET /server/app.js       → 404       /data/app.db → 404
+POST /api/login（带 X-Forwarded-Proto: https）
+                         → 200 + token + Set-Cookie: lsd.sid=…; HttpOnly; Secure
 ```
 
-### 20.3 部署完的验收（三条，顺序别换）
+真正的镜像构建由 Koyeb 执行（`docker build` 的日志怎么读见 `DEPLOY.md` §5）。
 
-1. `https://<服务名>.onrender.com/api/health` → `{"ok":true,"db":"app.db","users":5}`（`users: 5` 说明种子写进去了）
+### 20.6 部署完的验收（三条，顺序别换）
+
+1. `https://<服务名>-<组织>.koyeb.app/api/health` → `{"ok":true,"db":"app.db","users":5}`（`users: 5` 说明种子写进去了）
 2. 首页 `/` 正常：电话、地址、今日门诊、8 项服务、4 位医师都在
 3. `admin@demo.local` / `Demo@1234` 能登录并进 `dashboard.html`
 
-顺手确认 `https://<服务名>.onrender.com/README.md` 是 **404**——静态白名单没有因为换环境失守。
+顺手确认 `/README.md`、`/Dockerfile` 都是 **404**——静态白名单没有因为换环境失守。
 
-### 20.4 边界
+### 20.7 边界
 
-- **不引入 Docker**：Render 原生 Node 环境就够，`render.yaml` 已声明 `runtime: node`；
+- **Docker 只用于云端构建，不进本地开发流程**：本地仍是 `npm install && npm start`；
+  镜像只在 Koyeb 侧构建，`render.yaml`（原生 Node）保留作备选；
 - **不接托管数据库**：SQLite 就地重建是这期的取舍，换 Postgres 属于架构改造；
-- **不做多实例 / 不做持久盘（付费项）**：免费层单实例 + 每次播种，正好适合「老师看演示」；
-- **不发布小程序**：云端只托管网站；小程序地址要在 `config.js` 里手动改成 HTTPS 才能连云端（`DEPLOY.md` §11）；
-- **不碰业务逻辑**：本期只动路径解析、代理信任、密钥位置与配置外置，权限、状态机、计价、防双订一行没改——六套回归仍是 252 / 7 / 31 / 45 / 46 / 44。
+- **不做多实例 / 不做持久卷（付费项）**：免费层单实例 + 每次播种，正好适合「老师看演示」；
+- **不发布小程序**：云端只托管网站；小程序地址要在 `config.js` 里手动改成 HTTPS 才能连云端（`DEPLOY.md` §10）；
+- **不碰业务逻辑**：本期只新增 `Dockerfile` / `.dockerignore` 与文档，代码侧仍是路径解析、代理信任、密钥位置、配置外置那四处——
+  权限、状态机、计价、防双订一行没改，六套回归仍是 252 / 7 / 31 / 45 / 46 / 44。
