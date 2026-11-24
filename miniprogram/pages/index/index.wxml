@@ -1,0 +1,108 @@
+<!-- 首页：诊所信息卡 → 服务入口 → 医师预览 → 预约 CTA -->
+<view class="page">
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="state">
+    正在加载诊所信息…
+  </view>
+
+  <!-- 加载失败：给出可点的重试，而不是空白页 -->
+  <view wx:elif="{{error}}" class="state state--error">
+    <text>{{error}}</text>
+    <text class="state-tip">先确认后端已启动（npm start，3000 端口）</text>
+    <button class="btn btn--ghost" bindtap="reload">重新加载</button>
+  </view>
+
+  <block wx:else>
+
+    <!-- 1. 诊所信息卡 -->
+    <view class="card hero">
+      <view class="hero-top">
+        <view class="hero-mark">{{clinic.initial}}</view>
+        <view class="hero-id">
+          <text class="hero-name">{{clinic.name}}</text>
+          <text class="hero-en">{{clinic.name_en}}</text>
+        </view>
+      </view>
+
+      <view class="hero-row">
+        <text class="hero-label">今日门诊</text>
+        <text wx:if="{{today}}" class="hero-value">{{today.label}} {{today.open}} – {{today.close}}</text>
+        <text wx:else class="hero-value">今日门诊时间以门诊公告为准</text>
+      </view>
+
+      <view class="hero-row">
+        <text class="hero-label">门诊地址</text>
+        <text class="hero-value hero-value--wrap">{{clinic.address.full}}</text>
+      </view>
+
+      <view class="hero-row">
+        <text class="hero-label">联系电话</text>
+        <text class="hero-value">{{clinic.phone.display}}</text>
+      </view>
+
+      <view class="btn-row">
+        <button class="btn btn--primary" bindtap="callClinic">拨打电话</button>
+        <button class="btn btn--ghost" bindtap="goAppointment">预约到店</button>
+      </view>
+
+      <text class="hero-note">{{clinic.hours.caption}}｜{{clinic.hours.holiday_note}}</text>
+    </view>
+
+    <!-- 2. 服务入口 -->
+    <view class="section-head">
+      <text class="section-title">诊疗项目</text>
+      <text class="section-more" bindtap="goServices">全部 {{serviceTotal}} 项 ›</text>
+    </view>
+
+    <view class="svc-grid">
+      <view
+        class="svc-item"
+        wx:for="{{services}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        bindtap="openService"
+      >
+        <text class="svc-name">{{item.label}}</text>
+        <text class="svc-price">{{item.price_text}}</text>
+        <text class="svc-note">{{item.price_note}}</text>
+      </view>
+    </view>
+
+    <!-- 3. 医师预览 -->
+    <view class="section-head">
+      <text class="section-title">主诊医师</text>
+      <text class="section-more" bindtap="goDoctors">共 {{doctorTotal}} 位 ›</text>
+    </view>
+
+    <view class="card doc-preview">
+      <view class="doc-row" wx:for="{{doctors}}" wx:key="id">
+        <view class="avatar">{{item.initial}}</view>
+        <view class="doc-main">
+          <view class="doc-line">
+            <text class="doc-name">{{item.name}}</text>
+            <text class="chip">{{item.dept}}</text>
+          </view>
+          <text class="doc-intro">{{item.short_intro}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 4. 预约 CTA -->
+    <view class="card cta">
+      <text class="cta-title">想先聊聊再决定？</text>
+      <text class="cta-text">电话里说明牙齿情况，门诊会给出到店检查的建议时段。</text>
+      <view class="btn-row">
+        <button class="btn btn--green" bindtap="callClinic">电话咨询</button>
+        <button class="btn btn--ghost" bindtap="goAppointment">预约页</button>
+      </view>
+    </view>
+
+    <!-- 5. 演示声明：数据来自后端，页面不硬编码诊所信息 -->
+    <view class="demo-note">
+      {{clinic.demo_notice}}
+      本小程序为学习演示，数据由本地后端 /api/public/* 提供，不对外发布。
+    </view>
+
+  </block>
+</view>

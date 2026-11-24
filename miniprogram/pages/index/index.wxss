@@ -1,0 +1,192 @@
+/* 首页局部样式 */
+
+.hero {
+  padding: 32rpx 28rpx 28rpx;
+}
+
+.hero-top {
+  display: flex;
+  align-items: center;
+  margin-bottom: 28rpx;
+}
+
+.hero-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96rpx;
+  height: 96rpx;
+  margin-right: 20rpx;
+  border-radius: 24rpx;
+  background: #0C3A63;
+  color: #FFFFFF;
+  font-size: 44rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.hero-id {
+  display: flex;
+  flex-direction: column;
+}
+
+.hero-name {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #0D1B2A;
+  line-height: 1.3;
+}
+
+.hero-en {
+  font-size: 22rpx;
+  color: #6A7B91;
+  letter-spacing: 0.5rpx;
+}
+
+.hero-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 10rpx 0;
+}
+
+.hero-label {
+  width: 140rpx;
+  font-size: 24rpx;
+  color: #6A7B91;
+  flex-shrink: 0;
+}
+
+.hero-value {
+  font-size: 26rpx;
+  color: #0D1B2A;
+  font-weight: 600;
+}
+
+.hero-value--wrap {
+  flex: 1;
+  font-weight: 400;
+  color: #33465C;
+  line-height: 1.6;
+}
+
+.hero-note {
+  display: block;
+  margin-top: 18rpx;
+  font-size: 22rpx;
+  color: #6A7B91;
+  line-height: 1.7;
+}
+
+/* 服务入口：两列，不用 flex gap */
+.svc-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 8rpx;
+}
+
+.svc-item {
+  box-sizing: border-box;
+  width: 50%;
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  border: 1rpx solid #E2EAF3;
+}
+
+.svc-item:nth-child(odd) {
+  width: calc(50% - 10rpx);
+  margin-right: 20rpx;
+}
+
+.svc-item:nth-child(even) {
+  width: calc(50% - 10rpx);
+}
+
+.svc-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0D1B2A;
+}
+
+.svc-price {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: #10538C;
+  font-weight: 600;
+}
+
+.svc-note {
+  display: block;
+  margin-top: 2rpx;
+  font-size: 20rpx;
+  color: #8B9AAB;
+}
+
+/* 医师预览 */
+.doc-preview {
+  padding: 8rpx 28rpx;
+}
+
+.doc-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #E2EAF3;
+}
+
+.doc-row:last-child {
+  border-bottom: none;
+}
+
+.doc-main {
+  flex: 1;
+  margin-left: 20rpx;
+  min-width: 0;
+}
+
+.doc-line {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6rpx;
+}
+
+.doc-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0D1B2A;
+  margin-right: 12rpx;
+}
+
+.doc-line .chip {
+  margin: 0;
+}
+
+.doc-intro {
+  font-size: 24rpx;
+  color: #6A7B91;
+  line-height: 1.6;
+}
+
+/* 预约 CTA */
+.cta {
+  background: #F5F9FF;
+  border: 1rpx solid #C9DEFB;
+}
+
+.cta-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #0C3A63;
+}
+
+.cta-text {
+  display: block;
+  margin: 8rpx 0 22rpx;
+  font-size: 24rpx;
+  color: #33465C;
+  line-height: 1.7;
+}

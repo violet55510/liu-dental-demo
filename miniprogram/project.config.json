@@ -1,0 +1,53 @@
+{
+  "description": "刘氏口腔 · 微信小程序学习演示版（阶段二：JWT 登录 + 病人预约；不走开放平台登录、不做支付）。个人主体不发布医疗类目，仅本机开发者工具运行。",
+  "projectname": "liu-dental-miniprogram",
+  "appid": "wx89cbf3e1c05215cf",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "./",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "checkInvalidKey": true,
+    "checkSiteMap": false,
+    "uploadWithSourceMap": false,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "服务详情（洗牙）",
+          "pathName": "pages/service-detail/service-detail",
+          "query": "id=cleaning",
+          "scene": null
+        }
+      ]
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "editorSetting": {}
+}

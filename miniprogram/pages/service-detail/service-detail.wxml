@@ -1,0 +1,52 @@
+<!-- 项目详情：名称 / 价格区间 / 简介 / 擅长医师 -->
+<view class="page">
+
+  <view wx:if="{{loading}}" class="state">正在加载项目详情…</view>
+
+  <view wx:elif="{{error}}" class="state state--error">
+    <text>{{error}}</text>
+    <button class="btn btn--ghost" bindtap="goServices">返回项目列表</button>
+  </view>
+
+  <block wx:else>
+    <view class="card detail-head">
+      <text class="detail-name">{{service.label}}</text>
+      <view class="detail-price">
+        <text class="detail-price-value">{{service.price_text}}</text>
+        <text class="detail-price-note">{{service.price_note}}</text>
+      </view>
+      <text class="detail-desc">{{service.desc}}</text>
+    </view>
+
+    <view wx:if="{{doctors.length}}" class="section-head">
+      <text class="section-title">主诊医师</text>
+      <text class="section-more">{{doctors.length}} 位</text>
+    </view>
+
+    <view wx:if="{{doctors.length}}" class="card">
+      <view class="doc-row" wx:for="{{doctors}}" wx:key="id">
+        <view class="avatar">{{item.initial}}</view>
+        <view class="doc-main">
+          <view class="doc-line">
+            <text class="doc-name">{{item.name}}</text>
+            <text class="chip">{{item.dept}}</text>
+          </view>
+          <text class="doc-intro">{{item.short_intro}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="card card--flat">
+      <text class="text-body">费用与方案需经现场检查后确定：缺牙数量、骨量条件、材料品牌不同，价格差异较大。</text>
+    </view>
+
+    <view class="btn-row">
+      <button class="btn btn--primary" bindtap="callClinic">电话咨询</button>
+      <button class="btn btn--ghost" bindtap="goAppointment">预约到店</button>
+    </view>
+
+    <view class="demo-note detail-demo">
+      价格由本地后端 /api/public/services 下发，为演示数据，不构成报价。
+    </view>
+  </block>
+</view>

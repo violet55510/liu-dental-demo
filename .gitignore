@@ -1,0 +1,21 @@
+# 依赖与运行时产物，不要提交
+node_modules/
+data/
+*.log
+
+# 部署平台用环境变量传密钥，本地 .env 绝不入库
+.env
+.env.*
+
+# 编辑器 / 工具目录
+.workbuddy/
+.DS_Store
+
+# 微信开发者工具生成的本地私有配置（libVersion / 本机编译选项，因人而异）
+miniprogram/project.private.config.json
+
+# —— 说明（不是忽略规则）——
+# data/ 必须排除：里面是本地演示库与 data/.session-secret，
+# 推到 GitHub 等于把会话密钥公开。云端（Render）首次启动会自己建库、写种子。
+# miniprogram/ 不排除：小程序源码要跟着仓库走，且它不会被网站静态托管
+#（服务端白名单只放行 9 个页面 + /assets，第 5 节的 BLOCKED 是第二道闸）。

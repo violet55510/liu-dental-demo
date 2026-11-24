@@ -1,0 +1,55 @@
+/* 服务列表局部样式 */
+
+.svc-row {
+  display: flex;
+  align-items: center;
+  padding: 26rpx 24rpx;
+  margin-bottom: 18rpx;
+}
+
+.svc-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.svc-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.svc-row-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #0D1B2A;
+}
+
+.svc-row-price {
+  font-size: 24rpx;
+  color: #10538C;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.svc-row-desc {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #33465C;
+  line-height: 1.65;
+}
+
+.svc-row-note {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: #8B9AAB;
+}
+
+.svc-arrow {
+  margin-left: 12rpx;
+  color: #B7C4D3;
+  font-size: 36rpx;
+  line-height: 1;
+}

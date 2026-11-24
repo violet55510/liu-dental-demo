@@ -1,0 +1,108 @@
+/* 我的页局部样式 */
+
+.user-card {
+  display: flex;
+  align-items: center;
+  padding: 32rpx 28rpx;
+}
+
+.user-avatar {
+  background: #E2EAF3;
+  color: #8B9AAB;
+}
+
+.user-avatar--on {
+  background: #E8F1FD;
+  color: #10538C;
+}
+
+.user-main {
+  flex: 1;
+  margin-left: 20rpx;
+  min-width: 0;
+}
+
+.user-name {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #0D1B2A;
+}
+
+.user-sub {
+  display: block;
+  margin-top: 2rpx;
+  font-size: 23rpx;
+  color: #6A7B91;
+}
+
+.user-btn {
+  width: 160rpx;
+  height: 68rpx;
+  padding: 0;
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+
+.entry-card {
+  padding: 0 24rpx;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 0;
+  border-bottom: 1rpx solid #E2EAF3;
+}
+
+.entry:last-child {
+  border-bottom: none;
+}
+
+.entry-name {
+  font-size: 27rpx;
+  color: #33465C;
+}
+
+.entry-right {
+  display: flex;
+  align-items: center;
+}
+
+.entry-right .chip {
+  margin: 0;
+}
+
+.entry-arrow {
+  margin-left: 10rpx;
+  color: #B7C4D3;
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.about-card {
+  padding: 8rpx 24rpx;
+}
+
+.about-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #EEF3F9;
+}
+
+.about-row:last-child {
+  border-bottom: none;
+}
+
+.about-label {
+  font-size: 25rpx;
+  color: #6A7B91;
+}
+
+.about-value {
+  font-size: 25rpx;
+  color: #0D1B2A;
+}

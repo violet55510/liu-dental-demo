@@ -1,0 +1,51 @@
+# =========================================================
+# render.yaml — Render 蓝图（Blueprint）
+# ---------------------------------------------------------
+# 作用：在 Render 控制台选「New → Blueprint」并指向本仓库，
+#       Render 会自动读这个文件创建服务，不需要手填构建/启动命令。
+#
+# 平台约束（免费层）：
+#   · 没有持久磁盘 → 容器重启后 data/ 里的 SQLite 库会消失。
+#     本项目靠 server/db.js 的「空库自举」解决：启动时库不存在就建表 + 写种子，
+#     老师每次看到的都是干净的演示数据（这一点是可接受的取舍）。
+#   · 15 分钟无请求会休眠，下次访问需 30–60 秒冷启动，属正常现象。
+#   · 免费层只能跑 1 个实例，本文件不声明 scaling。
+#
+# 想加持久盘（数据不再随重启丢失）：把 plan 改成 starter，
+# 再补一段 disk:（挂载点例如 /var/data），同时把 DB_PATH 指到盘内路径。
+# =========================================================
+services:
+  - type: web
+    name: liu-dental-demo
+    runtime: node
+    plan: free
+    region: singapore          # 离国内最近；可选 oregon / ohio / virginia / frankfurt
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health   # 与 server/app.js 的 GET /api/health 对应
+    autoDeploy: true               # push 到 main 自动部署
+
+    envVars:
+      # 生产模式：cookie 带 Secure（Render 全站 HTTPS），并开启 trust proxy
+      - key: NODE_ENV
+        value: production
+
+      # 数据库路径（相对仓库根）。云端容器内可写，但**不持久**：
+      # 重启后文件消失，下次启动自动建表 + 播种。
+      # 若以后挂了持久盘，把它改成盘内路径，例如 /var/data/app.db。
+      - key: DB_PATH
+        value: data/app.db
+
+      # Node 版本以 package.json 的 engines.node（22.x）为准，
+      # 这里不再重复声明，避免两处版本打架。
+
+      # ⚠️ 不在这里写 SESSION_SECRET / JWT_SECRET：
+      #    首次启动会在 DB_PATH 同目录自动生成 .session-secret（32 字节随机），
+      #    JWT 密钥由它派生（HMAC-SHA256 / lsd/jwt/v1）。
+      #    代价是每次冷启动换一把新密钥 → 已登录用户掉线，需要重新登录（预期行为）。
+      #    若想让登录态跨重启保持，在 Render 控制台给本服务加两个环境变量
+      #    （各自 64 位 hex，且多实例必须一致）：
+      #      SESSION_SECRET=<64 位 hex>
+      #      JWT_SECRET=<64 位 hex>
+      #    生成方式见 DEPLOY.md「可选：固定密钥」。

@@ -1,0 +1,35 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/services/services",
+    "pages/doctors/doctors",
+    "pages/service-detail/service-detail",
+    "pages/appointment/appointment",
+    "pages/my-appointments/my-appointments",
+    "pages/mine/mine",
+    "pages/login/login",
+    "pages/register/register"
+  ],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#0C3A63",
+    "navigationBarTitleText": "刘氏口腔",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F6F9FD"
+  },
+  "tabBar": {
+    "color": "#6A7B91",
+    "selectedColor": "#10538C",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "首页" },
+      { "pagePath": "pages/services/services", "text": "服务" },
+      { "pagePath": "pages/doctors/doctors", "text": "医生" },
+      { "pagePath": "pages/appointment/appointment", "text": "预约" },
+      { "pagePath": "pages/mine/mine", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

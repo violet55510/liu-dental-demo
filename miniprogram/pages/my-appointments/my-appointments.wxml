@@ -1,0 +1,73 @@
+<!-- 我的预约：列表 + 取消（二次确认） -->
+<view class="page">
+
+  <view wx:if="{{needLogin}}" class="card gate">
+    <text class="gate-title">登录后查看预约</text>
+    <text class="gate-text">预约记录跟着就诊人账号走。登录后能看到你提交的每一条预约与当前状态。</text>
+    <button class="btn btn--primary" bindtap="goLogin">去登录</button>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{loading}}" class="state">正在加载预约…</view>
+
+    <view wx:elif="{{error}}" class="state state--error">
+      <text>{{error}}</text>
+      <button class="btn btn--ghost" bindtap="reload">重新加载</button>
+    </view>
+
+    <view wx:elif="{{appointments.length === 0}}" class="card gate">
+      <text class="gate-title">还没有预约</text>
+      <text class="gate-text">选一位医师和一个时段，提交后会出现在这里。</text>
+      <button class="btn btn--primary" bindtap="goBook">去预约</button>
+    </view>
+
+    <block wx:else>
+      <view wx:for="{{appointments}}" wx:key="id" class="card appt-card" data-appt-id="{{item.id}}">
+        <view class="appt-head">
+          <text class="appt-date">{{item.date}} {{item.time}}</text>
+          <text class="appt-status appt-status--{{item.statusClass}}">{{item.statusLabel}}</text>
+        </view>
+
+        <view class="appt-rows">
+          <view class="appt-row">
+            <text class="appt-label">医师</text>
+            <text class="appt-value">{{item.doctor}}（{{item.dept}}）</text>
+          </view>
+          <view class="appt-row">
+            <text class="appt-label">项目</text>
+            <text class="appt-value">{{item.serviceLabel}}</text>
+          </view>
+          <view class="appt-row">
+            <text class="appt-label">预约号</text>
+            <text class="appt-value">#{{item.id}}</text>
+          </view>
+          <view wx:if="{{item.orderLabel}}" class="appt-row">
+            <text class="appt-label">订单</text>
+            <text class="appt-value">{{item.orderLabel}}</text>
+          </view>
+        </view>
+
+        <view class="appt-foot">
+          <text class="appt-hint">{{item.cancelHint}}</text>
+          <button
+            wx:if="{{item.canCancel}}"
+            class="btn btn--ghost appt-btn"
+            disabled="{{cancellingId === item.id}}"
+            data-index="{{index}}"
+            bindtap="cancel">
+            {{cancellingId === item.id ? '取消中…' : '取消预约'}}
+          </button>
+        </view>
+      </view>
+
+      <view class="btn-row">
+        <button class="btn btn--primary" bindtap="goBook">再约一个</button>
+      </view>
+    </block>
+  </block>
+
+  <view class="demo-note">
+    演示站点：这里是本机数据库里的真实预约记录，但不会真的通知门诊。
+    开始前 24 小时内不能自助取消，需要电话联系；已完成的预约没有取消入口。
+  </view>
+</view>

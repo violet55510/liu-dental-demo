@@ -1,0 +1,92 @@
+/* 我的预约页局部样式 */
+
+.appt-card {
+  padding: 26rpx 28rpx;
+}
+
+.appt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #EEF3F9;
+}
+
+.appt-date {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #0D1B2A;
+}
+
+.appt-status {
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 21rpx;
+}
+
+.appt-status--warn {
+  background: #FFF7E8;
+  border: 1rpx solid #F0D8AC;
+  color: #8A5A00;
+}
+
+.appt-status--ok {
+  background: #E2F7F1;
+  border: 1rpx solid #B7E6D8;
+  color: #0F8C6E;
+}
+
+.appt-status--muted {
+  background: #F4F7FB;
+  border: 1rpx solid #E2EAF3;
+  color: #6A7B91;
+}
+
+.appt-rows {
+  padding: 8rpx 0;
+}
+
+.appt-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8rpx 0;
+}
+
+.appt-label {
+  font-size: 23rpx;
+  color: #6A7B91;
+}
+
+.appt-value {
+  flex: 1;
+  margin-left: 24rpx;
+  text-align: right;
+  font-size: 25rpx;
+  color: #33465C;
+}
+
+.appt-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #EEF3F9;
+}
+
+.appt-hint {
+  flex: 1;
+  font-size: 21rpx;
+  color: #8B9AAB;
+  line-height: 1.6;
+}
+
+.appt-btn {
+  width: 190rpx;
+  height: 64rpx;
+  margin-left: 16rpx;
+  padding: 0;
+  font-size: 24rpx;
+  flex-shrink: 0;
+}

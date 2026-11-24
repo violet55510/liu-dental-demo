@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>控制台 | 刘氏口腔（演示系统）</title>
+<meta name="description" content="刘氏口腔演示系统的控制台：按角色显示病人、医生、管理员的不同视图。">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23146FD1'/%3E%3Cpath d='M12 5.2c-1.6 0-2.3.7-3.6.7-1.3 0-2.2 1.1-2.2 2.5 0 1.4.4 2.3.7 3.6.3 1.3.4 3.6 1.5 3.6.9 0 .9-1.8 1.2-3 .2-.6.5-1 .9-1s.7.4.9 1c.3 1.2.3 3 1.2 3 1.1 0 1.2-2.3 1.5-3.6.3-1.3.7-2.2.7-3.6 0-1.4-.9-2.5-2.2-2.5-1.3 0-2-.7-3.6-.7z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/style.css">
+<noscript><style>.reveal{opacity:1;transform:none}</style></noscript>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到主要内容</a>
+
+<div class="topbar">
+  <div class="container">
+    <span class="topbar-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+      <span data-site="hours-line">周一至周日 09:00 – 20:00（节假日以门诊公告为准）</span>
+    </span>
+    <span class="topbar-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span data-site="address-line">长沙市岳麓区 <strong>（详细地址待填充）</strong></span>
+    </span>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html" aria-label="刘氏口腔 首页">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-2.2 0-3.2 1-5 1-1.9 0-3 1.6-3 3.6 0 2 .6 3.3 1 5.2.4 1.9.5 5.2 2.1 5.2 1.3 0 1.2-2.6 1.7-4.3.2-.8.6-1.4 1.2-1.4s1 .6 1.2 1.4c.5 1.7.4 4.3 1.7 4.3 1.6 0 1.7-3.3 2.1-5.2.4-1.9 1-3.2 1-5.2 0-2-1.1-3.6-3-3.6-1.8 0-2.8-1-5-1z"/></svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">刘氏口腔</span>
+        <span class="brand-sub">Liu's Dental · Yuelu</span>
+      </span>
+    </a>
+
+    <button class="nav-toggle" type="button" aria-label="打开导航菜单" aria-expanded="false" aria-controls="site-nav">
+      <span></span><span></span><span></span>
+    </button>
+
+    <nav class="nav" id="site-nav" aria-label="主导航">
+      <ul class="nav-list">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="services.html">服务项目</a></li>
+        <li><a href="doctors.html">医生团队</a></li>
+        <li><a href="appointment.html">预约</a></li>
+        <li><a href="contact.html">联系我们</a></li>
+        <li class="nav-auth-item" data-auth-slot></li>
+      </ul>
+    </nav>
+
+    <div class="header-actions">
+      <a class="btn btn--ghost btn--sm" href="tel:073188880000">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.9 2.2z"/></svg>
+        <span data-site="phone-text">0731-8888 0000</span>
+      </a>
+      <a class="btn btn--primary btn--sm" href="appointment.html">立即预约</a>
+      <span class="auth-slot" data-auth-slot></span>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- 加载中 -->
+  <section class="section" id="dash-loading">
+    <div class="container">
+      <p class="dash-loading" role="status" aria-live="polite">正在读取登录状态…</p>
+    </div>
+  </section>
+
+  <!-- 未登录 -->
+  <section class="section" id="dash-guest" hidden>
+    <div class="container">
+      <div class="empty-state">
+        <h1>还没有登录</h1>
+        <p>控制台需要登录后才能查看。病人用手机号，医生与管理员用邮箱。</p>
+        <div class="empty-actions">
+          <a class="btn btn--primary" href="login.html?next=dashboard.html">去登录</a>
+          <a class="btn btn--ghost" href="register.html">注册病人账号</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 已登录 -->
+  <section class="section" id="dash-app" hidden>
+    <div class="container">
+
+      <div class="dash-head">
+        <div>
+          <span class="eyebrow">控制台</span>
+          <h1 id="dash-title">我的控制台</h1>
+          <p class="dash-sub" id="dash-sub"></p>
+        </div>
+        <div class="dash-id">
+          <span class="role-badge" id="dash-role">—</span>
+          <p class="dash-account" id="dash-account"></p>
+        </div>
+      </div>
+
+      <!-- 病人 -->
+      <div class="dash-grid" id="panel-patient" hidden>
+        <article class="dash-card dash-card--wide">
+          <div class="dash-card-head">
+            <h2>我的预约</h2>
+            <a class="btn btn--ghost btn--sm" href="appointment.html">新建预约</a>
+          </div>
+          <p class="dash-hint">
+            开始前 24 小时内不能自助取消，请改为电话联系门诊。取消后该时段会重新放出。
+          </p>
+          <div class="appt-list" id="p-appts" aria-live="polite">
+            <p class="dash-empty">正在加载…</p>
+          </div>
+          <div class="form-status" id="p-status" role="status" aria-live="polite"></div>
+        </article>
+
+        <article class="dash-card">
+          <div class="dash-card-head"><h2>账号信息</h2></div>
+          <dl class="dash-list">
+            <dt>姓名</dt><dd id="p-name">—</dd>
+            <dt>手机号</dt><dd id="p-phone">—</dd>
+            <dt>角色</dt><dd>病人（注册时由服务端固定）</dd>
+            <dt>状态</dt><dd>正常</dd>
+          </dl>
+        </article>
+      </div>
+
+      <!-- 医生 -->
+      <div class="dash-grid" id="panel-doctor" hidden>
+        <article class="dash-card dash-card--wide">
+          <div class="dash-card-head">
+            <h2>我的患者预约</h2>
+            <span class="dash-count" id="d-summary"></span>
+          </div>
+          <p class="dash-hint">
+            只显示与你有预约关系的患者。「确认」把待确认改为已确认；已确认的可标记「完成」或「患者未到」。
+            病人取消后，这里的状态会同步变为已取消。
+          </p>
+          <div class="appt-list" id="d-appts" aria-live="polite">
+            <p class="dash-empty">正在加载…</p>
+          </div>
+          <div class="form-status" id="d-status" role="status" aria-live="polite"></div>
+        </article>
+
+        <article class="dash-card">
+          <div class="dash-card-head"><h2>账号信息</h2></div>
+          <dl class="dash-list">
+            <dt>姓名</dt><dd id="d-name">—</dd>
+            <dt>邮箱</dt><dd id="d-email">—</dd>
+            <dt>科室</dt><dd id="d-dept">—</dd>
+            <dt>角色</dt><dd>医生</dd>
+          </dl>
+        </article>
+      </div>
+
+      <!-- 管理员 -->
+      <div class="dash-grid" id="panel-admin" hidden>
+        <article class="dash-card dash-card--wide">
+          <div class="dash-card-head">
+            <h2>待审核的医生申请</h2>
+            <button class="btn btn--ghost btn--sm" type="button" id="admin-refresh">刷新</button>
+          </div>
+          <p class="dash-hint">医生账号注册后状态为「待审核」，激活后才能登录。停用会让对方的会话立即失效。</p>
+
+          <div class="table-scroll">
+            <table class="data-table" id="admin-table">
+              <thead>
+                <tr><th scope="col">姓名</th><th scope="col">邮箱</th><th scope="col">提交时间</th><th scope="col">操作</th></tr>
+              </thead>
+              <tbody id="admin-tbody">
+                <tr><td colspan="4" class="dash-empty">正在加载…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="form-status" id="admin-status" role="status" aria-live="polite"></div>
+        </article>
+
+        <article class="dash-card">
+          <div class="dash-card-head"><h2>已停用账号</h2></div>
+          <p class="dash-hint">停用不删除数据，只改 <code>status</code>。恢复需要再调一次激活接口。</p>
+          <ul class="dash-plain-list" id="admin-disabled">
+            <li class="dash-empty">正在加载…</li>
+          </ul>
+        </article>
+      </div>
+
+      <p class="dash-footnote">
+        页面上的按钮只是体验层。<strong>真正的权限判断在服务端</strong>：即使手工调用接口，病人也拿不到医生数据，医生也进不了管理员接口。
+      </p>
+
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="index.html" aria-label="刘氏口腔 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-2.2 0-3.2 1-5 1-1.9 0-3 1.6-3 3.6 0 2 .6 3.3 1 5.2.4 1.9.5 5.2 2.1 5.2 1.3 0 1.2-2.6 1.7-4.3.2-.8.6-1.4 1.2-1.4s1 .6 1.2 1.4c.5 1.7.4 4.3 1.7 4.3 1.6 0 1.7-3.3 2.1-5.2.4-1.9 1-3.2 1-5.2 0-2-1.1-3.6-3-3.6-1.8 0-2.8-1-5-1z"/></svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">刘氏口腔</span>
+            <span class="brand-sub">Liu's Dental · Yuelu</span>
+          </span>
+        </a>
+        <p>专注种植牙与牙齿矫正的社区口腔门诊，服务长沙岳麓区及周边居民。</p>
+      </div>
+
+      <div class="footer-col">
+        <h4>网站导航</h4>
+        <ul>
+          <li><a href="index.html">首页</a></li>
+          <li><a href="services.html">服务项目</a></li>
+          <li><a href="doctors.html">医生团队</a></li>
+          <li><a href="appointment.html">在线预约</a></li>
+          <li><a href="contact.html">联系我们</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>账户</h4>
+        <ul>
+          <li><a href="login.html">登录</a></li>
+          <li><a href="register.html">注册病人账号</a></li>
+          <li><a href="register.html#doctor">医生入驻申请</a></li>
+          <li><a href="dashboard.html">我的控制台</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>联系方式</h4>
+        <ul data-site="footer-contact">
+          <li><a href="tel:073188880000">0731-8888 0000</a></li>
+          <li data-site="address-plain">长沙市岳麓区（详细地址待填充）</li>
+          <li data-site="hours-plain">每日 09:00 – 20:00</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <span>© <span data-year>2026</span> 刘氏口腔 · 保留所有权利</span>
+      <span class="demo-note">本站为系统设计与学习用演示站点，非真实医疗机构</span>
+      <noscript><span class="demo-note">控制台依赖脚本渲染，启用 JavaScript 后显示。</span></noscript>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/render.js"></script>
+<script src="assets/js/main.js"></script>
+<script src="assets/js/dashboard.js"></script>
+<script src="assets/js/session.js"></script>
+</body>
+</html>

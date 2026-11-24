@@ -1,0 +1,305 @@
+/* =========================================================
+   app.wxss — 全局样式
+   ---------------------------------------------------------
+   和官网同一套视觉语言（蓝白 + 浅绿），但排版单位换成 rpx：
+   750rpx = 屏幕宽度，所以 24rpx ≈ 12px（iPhone 6 基准）。
+
+   三条不用：
+   - 不用第三方 UI 库（体积、可控性、学习目的）；
+   - 不用 :focus-visible（小程序没有键盘焦点这套语义）；
+   - 不用 px 写正文尺寸（不同机型会缩得不一样），只有 1px 边框例外。
+   ========================================================= */
+
+page {
+  background: #F6F9FD;
+  color: #33465C;
+  font-size: 28rpx;
+  line-height: 1.65;
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+}
+
+.page {
+  padding: 24rpx 24rpx 56rpx;
+}
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 20rpx rgba(10, 37, 64, 0.06);
+}
+
+.card--flat {
+  box-shadow: none;
+  border: 1rpx solid #E2EAF3;
+}
+
+/* ---------- 区块标题 ---------- */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8rpx 8rpx 16rpx;
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #0D1B2A;
+}
+
+.section-more {
+  font-size: 24rpx;
+  color: #10538C;
+}
+
+.section-sub {
+  padding: 0 8rpx 16rpx;
+  font-size: 24rpx;
+  color: #6A7B91;
+}
+
+/* ---------- 文本 ---------- */
+.title-lg {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #0D1B2A;
+  line-height: 1.35;
+}
+
+.text-muted {
+  color: #6A7B91;
+  font-size: 24rpx;
+}
+
+.text-body {
+  font-size: 26rpx;
+  color: #33465C;
+}
+
+.ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 标签 ---------- */
+.chip {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  margin: 0 10rpx 10rpx 0;
+  border-radius: 999rpx;
+  background: #F5F9FF;
+  border: 1rpx solid #C9DEFB;
+  color: #10538C;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.chip--green {
+  background: #E2F7F1;
+  border-color: #B7E6D8;
+  color: #0F8C6E;
+}
+
+.chip--warn {
+  background: #FFF7E8;
+  border-color: #F0D8AC;
+  color: #8A5A00;
+}
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 28rpx;
+  height: 80rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 999rpx;
+  border: none;
+}
+
+/* 小程序 button 自带 1px 伪元素边框，去掉它 */
+.btn::after {
+  border: none;
+}
+
+.btn--primary {
+  background: #10538C;
+  color: #FFFFFF;
+}
+
+.btn--green {
+  background: #0F8C6E;
+  color: #FFFFFF;
+}
+
+.btn--ghost {
+  background: #FFFFFF;
+  color: #10538C;
+  border: 1rpx solid #C9DEFB;
+}
+
+.btn[disabled] {
+  background: #E2EAF3;
+  color: #8B9AAB;
+}
+
+.btn-row {
+  display: flex;
+  margin-top: 8rpx;
+}
+
+.btn-row .btn {
+  flex: 1;
+}
+
+/* 不用 flex gap：低版本 iOS WebView 支持不完整，用相邻兄弟选择器更稳 */
+.btn-row .btn + .btn {
+  margin-left: 20rpx;
+}
+
+/* ---------- 头像占位 ---------- */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: #E8F1FD;
+  color: #10538C;
+  font-size: 36rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.avatar--lg {
+  width: 120rpx;
+  height: 120rpx;
+  font-size: 44rpx;
+}
+
+/* ---------- 加载 / 空 / 错误 ---------- */
+.state {
+  padding: 80rpx 40rpx;
+  text-align: center;
+  color: #6A7B91;
+  font-size: 26rpx;
+}
+
+.state--error {
+  color: #B4483C;
+}
+
+.state .btn {
+  display: inline-flex;
+  width: auto;
+  margin-top: 24rpx;
+  padding: 0 32rpx;
+}
+
+.state-tip {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #8B9AAB;
+}
+
+/* ---------- 分隔 ---------- */
+.divider {
+  height: 1rpx;
+  background: #E2EAF3;
+  margin: 24rpx 0;
+}
+
+/* ---------- 演示声明 ---------- */
+.demo-note {
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #F5F9FF;
+  border: 1rpx solid #E2EAF3;
+  color: #6A7B91;
+  font-size: 22rpx;
+  line-height: 1.7;
+}
+
+/* ---------- 表单（登录 / 注册 / 预约共用） ---------- */
+.field {
+  padding: 16rpx 0 20rpx;
+  border-bottom: 1rpx solid #EEF3F9;
+}
+
+.field:last-of-type {
+  border-bottom: none;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 8rpx;
+  font-size: 23rpx;
+  color: #6A7B91;
+}
+
+.field-input {
+  width: 100%;
+  height: 64rpx;
+  font-size: 30rpx;
+  color: #0D1B2A;
+}
+
+.field-placeholder {
+  color: #A9B7C6;
+}
+
+/* 表单错误提示：常驻在字段下方，不用 toast */
+.form-error {
+  margin-top: 16rpx;
+  padding: 14rpx 18rpx;
+  border-radius: 12rpx;
+  background: #FDF1EF;
+  border: 1rpx solid #F0CFC9;
+  color: #B4483C;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.form-hint {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #8B9AAB;
+  line-height: 1.6;
+}
+
+/* ---------- 需登录的引导块 ---------- */
+.gate {
+  padding: 48rpx 32rpx;
+  text-align: center;
+}
+
+.gate-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #0D1B2A;
+}
+
+.gate-text {
+  display: block;
+  margin: 12rpx 0 28rpx;
+  font-size: 24rpx;
+  color: #6A7B91;
+  line-height: 1.7;
+}
+
+.gate .btn {
+  display: inline-flex;
+  width: auto;
+  padding: 0 40rpx;
+}

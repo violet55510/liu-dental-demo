@@ -1,0 +1,30 @@
+{
+  "name": "liu-dental-demo",
+  "version": "2.5.0",
+  "private": true,
+  "description": "刘氏口腔演示站 · 展示 / 认证 / 预约 / 医生闭环 / 模拟支付 + 微信小程序端（展示 + JWT Bearer 登录 + 病人预约；Node + Express + SQLite；价格单一来源；不接入任何真实支付通道；小程序不发布）",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "node server/app.js",
+    "test:api": "node scripts/api-test.mjs",
+    "test:race": "node scripts/concurrency-test.mjs",
+    "test:ui": "node scripts/regression.mjs",
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:mp": "node scripts/miniprogram-check.mjs",
+    "mock:mp": "node scripts/miniprogram-mock.mjs",
+    "test:all": "node scripts/api-test.mjs && node scripts/concurrency-test.mjs && node scripts/regression.mjs && node scripts/e2e.mjs && node scripts/miniprogram-check.mjs && node scripts/miniprogram-mock.mjs",
+    "reset-db": "node server/reset-db.js",
+    "capture:payment": "node scripts/capture-payment.mjs"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@node-rs/bcrypt": "^2.0.0",
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.22.3",
+    "express-session": "^1.19.0",
+    "jsonwebtoken": "^9.0.3"
+  }
+}

@@ -1,0 +1,72 @@
+<!-- 我的：登录态 + 我的预约入口 + 演示声明 -->
+<view class="page">
+
+  <view class="card user-card">
+    <view class="avatar avatar--lg user-avatar {{user ? 'user-avatar--on' : ''}}">{{userInitial}}</view>
+    <view class="user-main">
+      <text class="user-name">{{user ? user.name : '未登录'}}</text>
+      <text class="user-sub">{{user ? roleLabel + ' · ' + phoneMasked : '登录后可预约与查看记录'}}</text>
+    </view>
+    <button wx:if="{{user}}" class="btn btn--ghost user-btn" bindtap="logout">退出</button>
+    <button wx:else class="btn btn--ghost user-btn" bindtap="goLogin">登录</button>
+  </view>
+
+  <view wx:if="{{error}}" class="form-error">{{error}}</view>
+
+  <view class="section-head">
+    <text class="section-title">我的</text>
+    <text wx:if="{{!user}}" class="section-more" bindtap="goRegister">还没有账号？去注册</text>
+  </view>
+
+  <view class="card card--flat entry-card">
+    <view class="entry" bindtap="goAppointments">
+      <text class="entry-name">我的预约</text>
+      <view class="entry-right">
+        <text class="chip {{user ? 'chip--green' : 'chip--warn'}}">{{user ? '查看 / 取消' : '需登录'}}</text>
+        <text class="entry-arrow">›</text>
+      </view>
+    </view>
+    <view class="entry" bindtap="notReady">
+      <text class="entry-name">我的订单</text>
+      <view class="entry-right">
+        <text class="chip chip--warn">官网端</text>
+        <text class="entry-arrow">›</text>
+      </view>
+    </view>
+    <view class="entry" bindtap="notReady">
+      <text class="entry-name">就诊人管理</text>
+      <view class="entry-right">
+        <text class="chip chip--warn">待开放</text>
+        <text class="entry-arrow">›</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section-head">
+    <text class="section-title">关于</text>
+  </view>
+
+  <view class="card card--flat about-card">
+    <view class="about-row">
+      <text class="about-label">版本</text>
+      <text class="about-value">{{version}}</text>
+    </view>
+    <view class="about-row">
+      <text class="about-label">当前阶段</text>
+      <text class="about-value">{{stage}}</text>
+    </view>
+    <view class="about-row">
+      <text class="about-label">数据来源</text>
+      <text class="about-value">本地后端 /api/*</text>
+    </view>
+    <view class="about-row">
+      <text class="about-label">登录凭证</text>
+      <text class="about-value">Bearer token（2 小时）</text>
+    </view>
+  </view>
+
+  <view class="demo-note">
+    本小程序为学习演示项目，不对外发布，不提供真实医疗服务；
+    个人主体不发布医疗类目。账号、预约与电话均写在本机数据库，不会通知任何真实门诊。
+  </view>
+</view>

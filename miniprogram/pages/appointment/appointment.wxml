@@ -1,0 +1,161 @@
+<!-- 预约：选医师 → 选日期 → 选时段 → 选项目 → 提交（需登录） -->
+<view class="page">
+
+  <!-- ① 未登录：引导，不静默失败 -->
+  <view wx:if="{{needLogin}}" class="card gate">
+    <text class="gate-title">登录后才能预约</text>
+    <text class="gate-text">预约要关联就诊人。用手机号登录，或注册一个病人账号（只要姓名、手机号、密码）。</text>
+    <button class="btn btn--primary" bindtap="goLogin">去登录 / 注册</button>
+  </view>
+
+  <!-- ② 提交成功：说清楚「待确认」，不说「约上了」 -->
+  <block wx:elif="{{success}}">
+    <view class="card done-card">
+      <text class="done-badge">已提交 · 待门诊确认</text>
+      <text class="done-title">预约申请已记录</text>
+      <text class="done-text">门诊确认后会以电话或到店方式与你联系。此时还只是「申请」，不算最终确定。</text>
+
+      <view class="done-rows">
+        <view class="done-row">
+          <text class="done-label">预约号</text>
+          <text class="done-value">#{{success.id}}</text>
+        </view>
+        <view class="done-row">
+          <text class="done-label">时间</text>
+          <text class="done-value">{{success.date}} {{success.time}}</text>
+        </view>
+        <view class="done-row">
+          <text class="done-label">医师</text>
+          <text class="done-value">{{success.doctor}}（{{success.dept}}）</text>
+        </view>
+        <view class="done-row">
+          <text class="done-label">项目</text>
+          <text class="done-value">{{success.service}}</text>
+        </view>
+        <view class="done-row">
+          <text class="done-label">当前状态</text>
+          <text class="done-value">{{success.status_label}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="btn-row">
+      <button class="btn btn--primary" bindtap="goMyAppointments">查看我的预约</button>
+      <button class="btn btn--ghost" bindtap="again">再约一个</button>
+    </view>
+  </block>
+
+  <!-- ③ 表单 -->
+  <block wx:else>
+    <view wx:if="{{loading}}" class="state">正在加载医师与项目…</view>
+
+    <view wx:elif="{{loadError}}" class="state state--error">
+      <text>{{loadError}}</text>
+      <button class="btn btn--ghost" bindtap="reload">重新加载</button>
+    </view>
+
+    <block wx:else>
+      <view class="card book-card">
+        <view class="book-row">
+          <text class="book-label">医师</text>
+          <picker class="book-picker" mode="selector" range="{{doctorNames}}" value="{{doctorIndex}}" bindchange="onDoctorChange">
+            <view class="picker-value">
+              <text>{{doctorIndex >= 0 ? doctorNames[doctorIndex] : '请选择医师'}}</text>
+              <text class="picker-arrow">›</text>
+            </view>
+          </picker>
+        </view>
+
+        <view class="book-row">
+          <text class="book-label">日期</text>
+          <picker class="book-picker" mode="date" value="{{dateValue}}" start="{{dateStart}}" end="{{dateEnd}}" bindchange="onDateChange">
+            <view class="picker-value">
+              <text>{{dateLabel}}</text>
+              <text class="picker-arrow">›</text>
+            </view>
+          </picker>
+        </view>
+
+        <view class="book-block">
+          <text class="book-label">时段</text>
+
+          <view wx:if="{{slotsLoading}}" class="slot-hint">正在查询可约时段…</view>
+
+          <view wx:elif="{{slotsError}}" class="slot-hint slot-hint--error">
+            <text>{{slotsError}}</text>
+          </view>
+
+          <view wx:elif="{{slots.length === 0}}" class="slot-hint">
+            这一天没有排班（或已全部约满 / 已过时间），换一天看看。
+          </view>
+
+          <view wx:else class="slot-grid">
+            <view
+              wx:for="{{slots}}"
+              wx:key="id"
+              class="slot {{item.disabled ? 'slot--off' : ''}} {{selectedSlotId === item.id ? 'slot--on' : ''}}"
+              data-id="{{item.id}}"
+              data-index="{{index}}"
+              bindtap="selectSlot">
+              <text class="slot-time">{{item.text}}</text>
+              <text class="slot-tag">{{item.tag}}</text>
+            </view>
+          </view>
+
+          <text wx:if="{{selectedSlotLabel}}" class="form-hint">已选：{{selectedSlotLabel}}</text>
+        </view>
+
+        <view class="book-row">
+          <text class="book-label">项目</text>
+          <picker class="book-picker" mode="selector" range="{{serviceNames}}" value="{{serviceIndex}}" bindchange="onServiceChange">
+            <view class="picker-value">
+              <text>{{serviceIndex >= 0 ? serviceNames[serviceIndex] : '请选择项目'}}</text>
+              <text class="picker-arrow">›</text>
+            </view>
+          </picker>
+        </view>
+
+        <view class="book-block">
+          <text class="book-label">备注（可选）</text>
+          <textarea
+            class="note-input"
+            maxlength="200"
+            placeholder="例如：右下后牙疼三天，想先检查；或写明既往病史、用药情况"
+            value="{{note}}"
+            bindinput="onNoteInput" />
+        </view>
+
+        <view wx:if="{{formError}}" class="form-error">{{formError}}</view>
+
+        <button class="btn btn--primary submit-btn" disabled="{{submitting}}" bindtap="submit">
+          {{submitting ? '提交中…' : '提交预约申请'}}
+        </button>
+      </view>
+
+      <view class="card card--flat tip-card">
+        <view class="tip-row">
+          <text class="tip-index">1</text>
+          <text class="tip-text">提交后状态是「待确认」，门诊确认才是最终确定；确认前可以自助取消。</text>
+        </view>
+        <view class="tip-row">
+          <text class="tip-index">2</text>
+          <text class="tip-text">开始前 24 小时内不能自助取消，需电话联系门诊改期。</text>
+        </view>
+        <view class="tip-row">
+          <text class="tip-index">3</text>
+          <text class="tip-text">页面上的价格为参考区间，实际费用以现场检查后的书面方案为准。</text>
+        </view>
+      </view>
+
+      <view wx:if="{{clinicPhone}}" class="phone-row" bindtap="callClinic">
+        <text class="phone-row-text">需要帮助？拨打门诊电话 {{clinicPhone}}</text>
+        <text class="phone-row-arrow">›</text>
+      </view>
+    </block>
+  </block>
+
+  <view class="demo-note">
+    演示站点：预约写入本机 SQLite，不会真的通知门诊，也不会发送任何短信。
+    小程序端本期只做病人预约；医生端与支付仍在官网页面上。
+  </view>
+</view>

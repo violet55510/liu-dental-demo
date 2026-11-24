@@ -1,0 +1,57 @@
+<!-- 医师团队：4 张卡片，全部字段来自接口 -->
+<view class="page">
+
+  <view wx:if="{{loading}}" class="state">正在加载医师信息…</view>
+
+  <view wx:elif="{{error}}" class="state state--error">
+    <text>{{error}}</text>
+    <text class="state-tip">先确认后端已启动（npm start，3000 端口）</text>
+    <button class="btn btn--ghost" bindtap="reload">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="section-sub">
+      共 {{doctors.length}} 位主诊医师｜职称、从业年限与出诊时间为演示数据，实际以门诊公示为准
+    </view>
+
+    <view class="card doc-card" wx:for="{{doctors}}" wx:key="id">
+      <view class="doc-head">
+        <view class="avatar avatar--lg">{{item.initial}}</view>
+        <view class="doc-id">
+          <view class="doc-name-line">
+            <text class="doc-name">{{item.name}}</text>
+            <text class="chip">{{item.dept}}</text>
+          </view>
+          <text class="doc-title">{{item.title}}</text>
+        </view>
+      </view>
+
+      <view class="doc-meta">
+        <view class="doc-meta-row">
+          <text class="doc-meta-label">从业年限</text>
+          <text class="doc-meta-value">{{item.years}}</text>
+          <text wx:if="{{item.years_pending}}" class="chip chip--warn">待核对</text>
+        </view>
+        <view class="doc-meta-row">
+          <text class="doc-meta-label">出诊时间</text>
+          <text class="doc-meta-value">{{item.schedule}}</text>
+          <text wx:if="{{item.schedule_pending}}" class="chip chip--warn">待核对</text>
+        </view>
+      </view>
+
+      <text class="doc-intro">{{item.intro}}</text>
+
+      <view class="doc-tags">
+        <text class="chip chip--green" wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this">{{tag}}</text>
+      </view>
+    </view>
+
+    <view class="btn-row">
+      <button class="btn btn--ghost" bindtap="goAppointment">预约页</button>
+    </view>
+
+    <view class="demo-note">
+      本页不展示执业证书编号与联系方式；医师信息由本地后端 /api/public/doctors 提供。
+    </view>
+  </block>
+</view>

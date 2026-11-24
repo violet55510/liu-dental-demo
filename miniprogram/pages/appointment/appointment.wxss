@@ -1,0 +1,247 @@
+/* 预约页局部样式 */
+
+.book-card {
+  padding: 8rpx 28rpx 28rpx;
+}
+
+.book-row {
+  display: flex;
+  align-items: center;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #EEF3F9;
+}
+
+.book-block {
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #EEF3F9;
+}
+
+.book-row:last-of-type {
+  border-bottom: none;
+}
+
+.book-label {
+  width: 120rpx;
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #6A7B91;
+}
+
+.book-picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 28rpx;
+  color: #0D1B2A;
+}
+
+.picker-arrow {
+  margin-left: 12rpx;
+  color: #B7C4D3;
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+/* ---------- 时段 ---------- */
+.slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 14rpx;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 200rpx;
+  margin: 0 14rpx 14rpx 0;
+  padding: 14rpx 0;
+  border-radius: 14rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #C9DEFB;
+}
+
+.slot:nth-child(3n) {
+  margin-right: 0;
+}
+
+.slot-time {
+  font-size: 25rpx;
+  color: #10538C;
+  font-weight: 600;
+}
+
+.slot-tag {
+  margin-top: 2rpx;
+  font-size: 20rpx;
+  color: #6A7B91;
+}
+
+.slot--off {
+  background: #F4F7FB;
+  border-color: #E2EAF3;
+}
+
+.slot--off .slot-time {
+  color: #A9B7C6;
+  font-weight: 400;
+}
+
+.slot--on {
+  background: #10538C;
+  border-color: #10538C;
+}
+
+.slot--on .slot-time,
+.slot--on .slot-tag {
+  color: #FFFFFF;
+}
+
+.slot-hint {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #6A7B91;
+  line-height: 1.7;
+}
+
+.slot-hint--error {
+  color: #B4483C;
+}
+
+/* ---------- 备注 ---------- */
+.note-input {
+  width: 100%;
+  height: 140rpx;
+  margin-top: 12rpx;
+  padding: 16rpx;
+  box-sizing: border-box;
+  border-radius: 14rpx;
+  border: 1rpx solid #E2EAF3;
+  background: #FBFDFF;
+  font-size: 26rpx;
+  color: #33465C;
+  line-height: 1.6;
+}
+
+.submit-btn {
+  width: 100%;
+  margin-top: 24rpx;
+}
+
+/* ---------- 提示 ---------- */
+.tip-card {
+  padding: 16rpx 28rpx;
+}
+
+.tip-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 10rpx 0;
+}
+
+.tip-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 16rpx;
+  border-radius: 50%;
+  background: #E2F7F1;
+  color: #0F8C6E;
+  font-size: 22rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tip-text {
+  flex: 1;
+  font-size: 25rpx;
+  color: #33465C;
+  line-height: 1.7;
+}
+
+.phone-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  border-radius: 20rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #E2EAF3;
+  margin-bottom: 20rpx;
+}
+
+.phone-row-text {
+  font-size: 25rpx;
+  color: #10538C;
+}
+
+.phone-row-arrow {
+  color: #B7C4D3;
+  font-size: 30rpx;
+}
+
+/* ---------- 提交成功 ---------- */
+.done-card {
+  padding: 32rpx 28rpx;
+  background: #F5FBF8;
+  border: 1rpx solid #B7E6D8;
+}
+
+.done-badge {
+  display: inline-block;
+  padding: 4rpx 18rpx;
+  margin-bottom: 16rpx;
+  border-radius: 999rpx;
+  background: #0F8C6E;
+  color: #FFFFFF;
+  font-size: 20rpx;
+}
+
+.done-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #0D1B2A;
+}
+
+.done-text {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #33465C;
+  line-height: 1.7;
+}
+
+.done-rows {
+  margin-top: 20rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid #D6EDE5;
+}
+
+.done-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10rpx 0;
+}
+
+.done-label {
+  font-size: 24rpx;
+  color: #6A7B91;
+}
+
+.done-value {
+  flex: 1;
+  margin-left: 24rpx;
+  text-align: right;
+  font-size: 25rpx;
+  color: #0D1B2A;
+}

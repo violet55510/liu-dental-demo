@@ -1,0 +1,85 @@
+/* 项目详情局部样式 */
+
+.detail-head {
+  padding: 32rpx 28rpx;
+}
+
+.detail-name {
+  display: block;
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #0D1B2A;
+}
+
+.detail-price {
+  display: flex;
+  flex-direction: column;
+  margin: 18rpx 0;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #F5F9FF;
+  border-left: 6rpx solid #10538C;
+}
+
+.detail-price-value {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #10538C;
+}
+
+.detail-price-note {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #6A7B91;
+}
+
+.detail-desc {
+  display: block;
+  font-size: 27rpx;
+  color: #33465C;
+  line-height: 1.8;
+}
+
+.doc-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #E2EAF3;
+}
+
+.doc-row:last-child {
+  border-bottom: none;
+}
+
+.doc-main {
+  flex: 1;
+  margin-left: 20rpx;
+  min-width: 0;
+}
+
+.doc-line {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4rpx;
+}
+
+.doc-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0D1B2A;
+  margin-right: 12rpx;
+}
+
+.doc-line .chip {
+  margin: 0;
+}
+
+.doc-intro {
+  font-size: 24rpx;
+  color: #6A7B91;
+  line-height: 1.6;
+}
+
+.detail-demo {
+  margin-top: 24rpx;
+}
