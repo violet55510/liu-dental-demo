@@ -18,7 +18,7 @@ const {
   verifyPassword
 } = require('./password');
 const { findUserById } = require('./db');
-const { verifyToken } = require('./jwt');
+const { verifyToken, isForeignToken } = require('./jwt');
 
 /* ---------- 1. 密码 ---------- */
 /* 具体实现（bcrypt / @node-rs/bcrypt）在 password.js 里选，调用方不关心。 */
@@ -77,7 +77,14 @@ function str(v) {
 
    ★ 头格式不对也算失败 ★
    "Authorization: abc"（缺 Bearer 前缀）不当作「没带凭证」，
-   因为那说明客户端代码写错了，静默忽略只会让 bug 藏得更深。 */
+   因为那说明客户端代码写错了，静默忽略只会让 bug 藏得更深。
+
+   ★ 唯一的例外：签发方明确是别人的 token ★
+   反向代理层可能自己塞一条 Bearer（WorkBuddy 应用托管就是这样，iss=cloudstudio.net），
+   而且会覆盖客户端带的那条。那条 token 不是我们的凭证，验签必然失败，
+   留着它只会把 Web 的 cookie 会话一起打死。所以 iss 明确是别人的 → 忽略这一条，
+   继续看 cookie。判断逻辑在 jwt.js 的 isForeignToken()，
+   结构不合法 / 没有 iss 的 token 仍然按「自己的」处理（失败即 401，不放宽）。 */
 function readBearer(req) {
   const raw = req.headers && req.headers.authorization;
   if (typeof raw !== 'string' || raw.trim() === '') return null;
@@ -86,6 +93,7 @@ function readBearer(req) {
   if (!m) {
     return { error: { code: 'BAD_AUTH_HEADER', message: 'Authorization 头格式应为：Bearer <token>' } };
   }
+  if (isForeignToken(m[1])) return null;
   return { token: m[1] };
 }
 

@@ -9,7 +9,8 @@
        Bearer  → 给小程序（JWT，客户端自己保存与携带）
 
    token 的三条硬约束：
-     1. payload 只放 { id, role }（iat / exp 是 JWT 标准声明，由库写入），
+     1. payload 只放 { id, role }（iat / exp / iss 是 JWT 标准声明，由库写入；
+        iss 用来区分「本服务签发」与「托管平台网关塞进来的第三方 token」），
         不放姓名 / 手机号 —— token 会落在客户端的 storage 里，能少放就少放。
      2. role 只是「客户端拿来做提示」的线索，鉴权一律回库查（auth.js）。
         所以就算有人把 payload 里的 role 改成 doctor，也提不了权；
@@ -27,6 +28,7 @@ const ALGORITHM = 'HS256';
 const TTL_SECONDS = 2 * 60 * 60;        // 2 小时，和 Web 会话 maxAge 保持一致
 const MIN_SECRET_LEN = 32;              // 32 字符 ≈ 256 位熵（hex 编码时 64 位）
 const DERIVE_LABEL = 'lsd/jwt/v1';      // 派生标签：换标签等于换一把新钥匙
+const OWNER = 'liu-dental-demo';        // 本服务签发 token 的 iss，用来区分「谁的凭证」
 
 /* ---------- 1. 密钥解析 ----------
    优先级：
@@ -95,8 +97,38 @@ function signToken(row) {
   return jwt.sign(
     { id: row.id, role: row.role },
     getSecret(),
-    { algorithm: ALGORITHM, expiresIn: TTL_SECONDS }
+    { algorithm: ALGORITHM, expiresIn: TTL_SECONDS, issuer: OWNER }
   );
+}
+
+/* ---------- 2.5 这是谁的凭证 ----------
+   托管平台（WorkBuddy 应用托管 / 云 IDE 反代）会在网关层给**每个**请求
+   塞一条自己的 `Authorization: Bearer <平台 JWT>`（iss=cloudstudio.net），
+   并且会覆盖客户端自己带的那一条。
+
+   我们的「出现 Authorization 就只认 Bearer、验签失败即 401」是为了防止
+   「过期 token + 有效 cookie」静默通过 —— 不是为了让别人的网关 token
+   把我们自己的 Web 会话打死。所以先认签发方：
+
+     · iss 明确是别人（且不是我们） → 平台注入，忽略，交还给 cookie 通道
+     · 没有 iss / 结构不是 JWT / iss 就是我们 → 一律当自己的凭证
+       （验签失败照样 401，绝不静默放行）
+
+   注意：忽略外来 token 不会放宽任何校验 —— 外来 token 本来就签不出我们的
+   密钥，就算被当成自己的也只会 401。这里只是别让它误伤 cookie。 */
+function isForeignToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return false;
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch {
+    return false;
+  }
+
+  const iss = payload && payload.iss;
+  return typeof iss === 'string' && iss.length > 0 && iss !== OWNER;
 }
 
 /* ---------- 3. 校验 ----------
@@ -134,8 +166,10 @@ module.exports = {
   ALGORITHM,
   TTL_SECONDS,
   MIN_SECRET_LEN,
+  OWNER,
   initJwt,
   signToken,
   verifyToken,
+  isForeignToken,
   getSecretInfo: () => ({ source: secretInfo.source })
 };

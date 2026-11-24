@@ -1492,8 +1492,8 @@ const parts = String(token || '').split('.');
 let tokenPayload = null;
 try { tokenPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')); } catch {}
 
-check('payload 只有 id / role（外加 JWT 标准声明 iat / exp）',
-  !!tokenPayload && JSON.stringify(Object.keys(tokenPayload).sort()) === JSON.stringify(['exp', 'iat', 'id', 'role']),
+check('payload 只有 id / role（外加 JWT 标准声明 iat / exp / iss）',
+  !!tokenPayload && JSON.stringify(Object.keys(tokenPayload).sort()) === JSON.stringify(['exp', 'iat', 'id', 'iss', 'role']),
   JSON.stringify(tokenPayload));
 check('payload 里没有姓名 / 手机号 / 密码哈希',
   !!tokenPayload && !/name|phone|email|password|hash/i.test(JSON.stringify(tokenPayload)),
@@ -1607,6 +1607,29 @@ check('好 cookie + 坏 Bearer → 401（出现 Authorization 就只认它，不
 
 check('Bearer 请求不会被写会话 cookie（无状态通道不产生会话）',
   meBearer.setCookie.length === 0, meBearer.setCookie.join(' | '));
+
+/* --- 22.4.1 平台网关注入的第三方 Bearer 不许误伤 cookie ---
+   托管平台（WorkBuddy 应用托管）会在反代层给每个请求塞一条自己的
+   `Authorization: Bearer <平台 JWT>`（iss=cloudstudio.net），并覆盖客户端带的那条。
+   它签不出我们的密钥，验签必然失败；如果不按签发方区分，结果是
+   「线上所有登录态接口都 401」。这里固化三条边界：
+     · 外来 token 单独出现 → 当匿名（200 + null），不是 401
+     · 外来 token + 有效 cookie → 回落 cookie，照常 200
+     · 自己的坏 token + 有效 cookie → 仍然 401（上一组那条不许被放宽） */
+const foreignToken = jwtLib.sign({ iss: 'cloudstudio.net', user_id: '999', region: 'bj10' },
+  'platform-gateway-signed', { algorithm: HS, expiresIn: 3600 });
+
+const foreignMe = await rawFetch('/api/me', { headers: authHeader(foreignToken) });
+check('平台注入的第三方 Bearer 被忽略：/api/me → 200 + user:null（不是 401）',
+  foreignMe.status === 200 && foreignMe.json.user === null,
+  'status=' + foreignMe.status + ' ' + foreignMe.text.slice(0, 120));
+
+const foreignPlusCookie = await rawFetch('/api/patient/appointments', {
+  headers: { Cookie: cookieOwner.cookie, authorization: 'Bearer ' + foreignToken }
+});
+check('第三方 Bearer + 有效 cookie → 200（回落 cookie，线上登录态不被网关打死）',
+  foreignPlusCookie.status === 200,
+  'status=' + foreignPlusCookie.status + ' ' + foreignPlusCookie.text.slice(0, 120));
 
 /* --- 22.5 停用账号：token 还有 2 小时也不管用（回库查 status） --- */
 const w7 = new Database(DB_FILE);

@@ -11,6 +11,9 @@ data/
 .workbuddy/
 .DS_Store
 
+# 应用托管平台生成的本地标记文件（与发布记录绑定，换机器就没用）
+.wbapp_*.genie
+
 # 微信开发者工具生成的本地私有配置（libVersion / 本机编译选项，因人而异）
 miniprogram/project.private.config.json
 
