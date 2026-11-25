@@ -2458,7 +2458,7 @@ JWT_SECRET=<64 位 hex> JWT_REQUIRE_ENV=1 SESSION_SECRET=<另一把 64 位 hex> 
 ```
 miniprogram/
 ├── app.js                          # 全局入口：clinic 缓存（5 分钟）+ 登录用户缓存（不含 token）
-├── app.json                        # 9 个页面（5 tab + 4 非 tab）+ 导航栏配色
+├── app.json                        # 9 个页面（5 tab + 4 非 tab）+ 导航栏配色 + lazyCodeLoading
 ├── app.wxss                        # 全局样式：卡片 / 按钮 / 标签 / 表单 / 登录引导（rpx）
 ├── project.config.json             # 开发配置：urlCheck=false、appid=wx89cbf3e1c05215cf、miniprogramRoot=./
 ├── sitemap.json                    # 全站 disallow（不参与微信搜索）
@@ -2492,7 +2492,15 @@ miniprogram/
 
 > **AppID 与 AppSecret 不是一回事。** `appid`（`wx89cb…15cf`）是公开标识，写在 `project.config.json` 里没问题，别人拿到也做不了什么；`AppSecret` 是**服务端密钥**，一旦泄露就能换取 `access_token`、调用该小程序的服务端接口——本项目**根本没有使用**它，也绝不要写进小程序代码、仓库或 `project.config.json`。真要用（比如 `code2session`），只能放服务端环境变量。
 
-如果将来真要发布，改动顺序是：① 域名备案 + 证书 → ② 小程序后台配「request 合法域名」→ ③ 把 `utils/request.js` 的 `BASE_URL` 换成 `https://…` → ④ `urlCheck` 改回 `true` → ⑤ 类目与资质审核（医疗类目个人主体不受理）。**前四步不改代码逻辑，第五步是能不能发的前提。**
+如果将来真要发布，改动顺序是：① 域名备案 + 证书 → ② 小程序后台配「request 合法域名」→ ③ 把 `miniprogram/config.js` 的 `BASE_URL` 换成 `https://…` → ④ `urlCheck` 改回 `true` → ⑤ 类目与资质审核（医疗类目个人主体不受理）。**前四步不改代码逻辑，第五步是能不能发的前提。**
+
+#### 按需注入（`lazyCodeLoading`）
+
+`app.json` 里配了 `"lazyCodeLoading": "requiredComponents"`。这是微信「代码质量」检测的必查项——没开的话，上传时会在代码质量报告里提示「未开启按需注入」。
+
+**为什么这个项目开启后是安全的**：全局与 9 个页面的 `usingComponents` 都是空的（零自定义组件，全部用 `view` / `text` / `button` 原生节点），也没有「动态路径声明组件」「`this.selectComponent` 取子组件」这类依赖静态注入的写法。所以「只注入当前页面用到的代码」不会漏掉任何东西。包体积 220 KB（无图片资源），远低于 2 MB 主包上限，不需要分包。
+
+**它只解决「代码质量检测」这一项，不解决发布门槛。** 代码质量报告变绿 ≠ 能提审：仍要过 HTTPS + 已备案域名 + request 合法域名 + 医疗类目资质（个人主体不受理）。
 
 ### 19.5 最终验证（`npm run test:all`，六套，退出码 0）
 
@@ -2722,7 +2730,12 @@ x-forwarded-proto: https
 - **SQLite 在沙箱里是容器本地文件**：重新发布或实例回收后数据回到种子状态（5 个账号 + 196 时段），
   演示够用，**不能当正式库**；要持久化只有两条路——接云数据库（要改 SQL 层）或换带持久卷的云托管；
 - **不是小程序**：托管的是网页；小程序仍走微信开发者工具（本期不上传、不提审，见 §19.2）；
-- **每次重新发布前先同步 `.workbuddy/deploy/web/`**，否则线上跑的还是旧代码。
+- **每次重新发布前先同步 `.workbuddy/deploy/web/`**，否则线上跑的还是旧代码；
+- **这个域名不能当小程序的 `BASE_URL`**：网关会把每个请求的 `Authorization` 换成平台自己的令牌，而 `auth.js`
+  只把「签发方是本服务」的 token 当真，外来令牌一律当「没带」。Web 端有 cookie 兜底所以登录正常；小程序没有
+  cookie、只剩 Bearer，于是**带合法 token 也会被当成匿名**——实测 `Bearer <本服务 token>` 调 `/api/me`
+  返回 `{"user":null}`，调 `/api/patient/appointments` 直接 401。小程序要连线上，必须换一个不改写
+  `Authorization` 的服务端（云托管 / 自建），见 §19.4 的发布改动顺序。
 
 ### 21.7 回归（本轮）
 
