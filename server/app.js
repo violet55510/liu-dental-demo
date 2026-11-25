@@ -8,6 +8,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const express = require('express');
@@ -23,6 +24,12 @@ const publicRoutes = require('./routes/public');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
+/* ★ 监听地址必须是 0.0.0.0（所有网卡），不能是 127.0.0.1 ★
+   127.0.0.1 只接受「本机自己」的连接，手机 / 同事电脑 / 局域网里的任何设备
+   都会连不上 —— 小程序真机调试时请求超时，十有八九是这里写死了回环地址。
+   容器（Koyeb / Docker）同理：绑回环地址时平台的健康检查也探不到。
+   需要只给本机用时，用 HOST=127.0.0.1 npm start 显式收窄。 */
+const HOST = process.env.HOST || '0.0.0.0';
 const isProd = process.env.NODE_ENV === 'production';
 
 /* 会话密钥文件放在数据库同目录（默认 data/）：
@@ -239,8 +246,42 @@ app.use((err, req, res, next) => {  // eslint-disable-line no-unused-vars
 });
 
 /* ---------- 7. 启动 ---------- */
-const server = app.listen(PORT, () => {
-  console.log(`刘氏口腔演示站已启动  http://localhost:${PORT}`);
+/* 启动时把「本机能用的网址」打出来。
+   局域网 IP 是手写 miniprogram/config.js 时最需要的信息；
+   让人自己去 ipconfig 里翻，很容易抄到虚拟网卡（VMware / WSL / VPN / 蓝牙）的地址上。
+   取 family=IPv4 且非 internal 的地址；取不到就什么都不打，绝不影响启动。 */
+function lanAddresses() {
+  const out = [];
+  try {
+    const nets = os.networkInterfaces();
+    Object.keys(nets).forEach((name) => {
+      (nets[name] || []).forEach((n) => {
+        const family = typeof n.family === 'string' ? n.family : (n.family === 4 ? 'IPv4' : '');
+        if (family === 'IPv4' && !n.internal) out.push({ name, address: n.address });
+      });
+    });
+  } catch { /* 拿不到网卡信息不影响启动 */ }
+
+  /* 虚拟网卡（VPN / VMware / WSL / 蓝牙…）也会报一个 IPv4，
+     抄错了在手机上就是连不上。把真实网卡排前面，虚拟的标注出来。 */
+  const VIRTUAL = /vpn|virtual|vmware|vbox|hyper-v|vethernet|wsl|docker|tap|tun|zerotier|radmin|tailscale|bluetooth|loopback|npcap/i;
+  return out
+    .map((n) => ({ name: n.name, address: n.address, virtual: VIRTUAL.test(n.name) }))
+    .sort((a, b) => Number(a.virtual) - Number(b.virtual));
+}
+
+const server = app.listen(PORT, HOST, () => {
+  console.log(`刘氏口腔演示站已启动  监听 ${HOST}:${PORT}`);
+  /* localhost 在某些 Windows 环境会先解析成 ::1，而这里绑的是 IPv4 全网卡，
+     所以本机调试统一推荐 127.0.0.1，少一类「明明启动了却打不开」的困惑。 */
+  console.log(`本机访问：http://127.0.0.1:${PORT}`);
+  const lan = lanAddresses();
+  if (lan.length) {
+    console.log('同一局域网 / 手机真机访问（填进 miniprogram/config.js 的 BASE_URL）：');
+    lan.forEach((n) => console.log(
+      `  http://${n.address}:${PORT}   [${n.name}]${n.virtual ? '  ← 虚拟网卡，手机通常连不到这个' : ''}`
+    ));
+  }
   console.log(`数据库：${DB_FILE}`);
   /* 只打印来源，绝不打印密钥本身 */
   console.log(`会话密钥：${secretInfo.source}`);

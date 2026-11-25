@@ -33,9 +33,22 @@ const PORT = Number(process.env.MP_PORT || 3107);
 const BASE = `http://127.0.0.1:${PORT}`;
 /* 页面里的 baseURL 会随调试环境改（localhost / 内网 IP / 云端 HTTPS），
    而它从第九期起放在 miniprogram/config.js，所以从那里读出来，
-   不在脚本里写死主机 —— 否则改一次地址就要回来改这个脚本。 */
-const PAGE_BASE = (fs.readFileSync(path.join(MP, 'config.js'), 'utf8')
-  .match(/BASE_URL:\s*'([^']+)'/) || [])[1] || '';
+   不在脚本里写死主机 —— 否则改一次地址就要回来改这个脚本。
+
+   ★ 必须 require，不能用正则去 match 文本 ★
+   config.js 的注释里为了说明「三种场景」也写了 `BASE_URL: 'http://localhost:3000'`
+   这类示例，正则取第一个匹配会拿到注释里的地址（表现为「全部请求都算外部地址」），
+   而且这种 bug 只在把真实值改成 IP 之后才暴露 —— 注释示例恰好等于真值时是看不出来的。 */
+const PAGE_BASE = (() => {
+  try {
+    /* .mjs 里没有 require，必须用 createRequire 才能加载 CommonJS 的 config.js */
+    const cfg = createRequire(import.meta.url)(path.join(MP, 'config.js'));
+    return (cfg && typeof cfg.BASE_URL === 'string') ? cfg.BASE_URL : '';
+  } catch (e) {
+    console.error('[mock] 读 miniprogram/config.js 失败：' + e.message);
+    return '';
+  }
+})();
 const DB_FILE = path.join(TMP, 'mp-mock.db');
 const SERVER_LOG = path.join(TMP, 'mp-mock-server.log');
 
