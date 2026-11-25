@@ -43,6 +43,12 @@ const PAGE_BASE = (() => {
   try {
     /* .mjs 里没有 require，必须用 createRequire 才能加载 CommonJS 的 config.js */
     const cfg = createRequire(import.meta.url)(path.join(MP, 'config.js'));
+    /* ★ 这个脚本模拟的是「本地 HTTP 后端 + 页面逻辑」，环境里没有 wx.cloud ★
+       若 config.js 已切到云托管通道（enabled: true），这里必须显式关掉，
+       否则所有请求会走 callContainer 而全部失败（44 条断言全红）。
+       CommonJS 的模块缓存是全局按路径共享的，所以改这个对象属性，
+       页面里 require('../config') 拿到的也是同一份，改动同样生效。 */
+    if (cfg && cfg.CLOUD) cfg.CLOUD.enabled = false;
     return (cfg && typeof cfg.BASE_URL === 'string') ? cfg.BASE_URL : '';
   } catch (e) {
     console.error('[mock] 读 miniprogram/config.js 失败：' + e.message);

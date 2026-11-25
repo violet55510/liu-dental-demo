@@ -213,8 +213,8 @@ check('统一错误处理：normalizeError + toastError 都已导出',
   /function normalizeError/.test(req) && /toastError: toastError/.test(req), '');
 check('拒绝完整域名请求（只接受 / 开头的站内路径）',
   /function assertLocalPath/.test(req) && /charAt\(0\) !== '\/'/.test(req), '');
-check('云托管通道存在，但默认关闭（enabled: false 时仍走 wx.request）',
-  /CLOUD:\s*\{[\s\S]{0,120}enabled:\s*false/.test(cfgCode) &&
+check('云托管通道存在，开关是布尔值，且关掉即可回退 wx.request',
+  /CLOUD:\s*\{[\s\S]{0,240}enabled:\s*(true|false)/.test(cfgCode) &&
   /wx\.cloud\.callContainer/.test(req) &&
   /CLOUD_ENABLED/.test(req), '');
 check('云通道只在 env 与 service 都填了才生效（配错不弄挂本地开发）',

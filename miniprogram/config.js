@@ -66,11 +66,11 @@ module.exports = {
   /* ★ 云托管通道 ★
      开通云托管后把 enabled 改成 true，并填上控制台里的「环境 ID」和「服务名称」，
      小程序就不再请求上面的 BASE_URL，而是直连云端。
-     没开通之前保持 enabled: false —— 不影响本地开发、不影响现有回归。 */
+     想退回本地开发：把 enabled 改回 false（或直接删掉 env / service 任一值）。 */
   CLOUD: {
-    enabled: false,
-    env: '',       // 例如 'prod-8gxxxxxx'（云托管控制台 → 环境 → 环境 ID）
-    service: ''    // 例如 'api'（云托管控制台 → 服务列表里的服务名）
+    enabled: true,
+    env: 'prod-d1gxw1vfja675c5b9',    // 云托管控制台右上角「环境 prod（上海）」里的环境 ID
+    service: 'springboot-vaij-001'    // 服务列表里的服务名（名字是建模板时自动生成的，不影响使用）
   }
 
   /* 真机（同一局域网）改成电脑的 IPv4，例如：
