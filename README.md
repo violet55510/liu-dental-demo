@@ -19,7 +19,7 @@
 技术上重点做了以下几件事（也是本项目的考察点）：
 
 1. **权限以数据库为准**：每次请求都回库查 `role` 与 `status`，不信任前端传值，也不信任 session / token 里缓存的角色；管理员停用账号后立即生效。
-2. **预约状态机**：`pending → confirmed → completed / no_show / cancelled` 共 7 条合法转换，非法转换统一返回 `409`，并把「当前状态 + 期望状态」一并告诉前端。
+2. **预约状态机**：`pending → confirmed → completed / no_show / cancelled` 共 8 条合法转换（含 `no_show → confirmed` 与 `completed → confirmed` 两条纠错边），非法转换统一返回 `409`，并把「当前状态 + 期望状态」一并告诉前端。
 3. **防重复预约交给数据库**：同一时段用部分唯一索引 `ux_appt_active_slot` 保证只能有一条有效预约，不在应用层写「先查有没有、再插入」。
 4. **价格只有一个来源**：金额维护在 `assets/js/data.js` 的 `services[]`（整数分），服务端启动时读取并校验；下单金额完全由服务端计算，不接收前端传来的金额。
 5. **双凭证认证**：Web 用 cookie 会话，小程序用 JWT Bearer，两条通道解析出同一个身份，业务代码不需要分叉。
@@ -60,8 +60,8 @@
 #### 2.4 建议的验收路径（约 5 分钟）
 
 1. 用**病人**身份注册并登录 → 「预约挂号」选择医师、日期、时段与项目 → 提交，状态为「待确认」。
-2. 换用该医师的账号登录 → 控制台工作台出现这条预约 → 点「确认」→ 再点「完成」。
-3. 换回病人账号 → 「我的预约」查看详情；对另一条预约点「取消」。距离开始时间不足 24 小时的预约不允许取消，页面会说明原因（这条规则由服务端计算，前端不做判断）。
+2. 换用该医师的账号登录 → 控制台工作台出现这条预约 → 点「确认」。**「标记完成」要等预约时段开始之后**（提前点会被拒绝，提示 `TOO_EARLY`）——这是防止「把明天的预约今天标成已完成」的闸门。
+3. 换回病人账号 → 「我的预约」查看详情；对另一条预约点「取消」。**时段开始前都可以自助取消**，已支付的会在同一笔操作里一并退款；时段已开始则需电话联系门诊（规则由服务端计算，前端不自己判断）。
 4. 病人 → 我的预约 → 打开未支付的订单 → 进入支付页完成「支付」或「退款」。**这是模拟支付，不会产生任何真实扣款。**
 5. 管理员登录 → 控制台查看待审核的医生申请并通过一条，再用该医生账号登录验证权限已生效。
 
@@ -134,7 +134,7 @@ npm start            # 启动服务，默认 http://localhost:3000
 npm run reset-db     # 重置演示数据（需先停止服务）
 
 # 自动化回归（需本机已安装 Edge 浏览器，脚本会自行起临时库与临时端口）
-npm run test:api     # 接口回归：22 组 / 254 条断言
+npm run test:api     # 接口回归：22 组 / 266 条断言
 npm run test:race    # 并发防重：2 组 / 7 条
 npm run test:ui      # 展示页交互：7 组 / 31 条
 npm run test:e2e     # 端到端流程：9 组 / 45 条
@@ -142,7 +142,7 @@ npm run test:mp      # 小程序工程静态检查：6 组 / 46 条
 npm run mock:mp      # 小程序逻辑模拟：7 组 / 44 条
 ```
 
-以上六套合计 **427 条断言**，当前全部通过。完整的实现细节、设计取舍与每一期的验证记录见 `README.md` 正文各章。
+以上六套合计 **439 条断言**，当前全部通过。完整的实现细节、设计取舍与每一期的验证记录见 `README.md` 正文各章。
 
 ---
 
@@ -270,7 +270,7 @@ Dental Clinic/
 │   └── .session-secret     # 会话签名密钥（首次启动自动生成，≥32 字符否则拒绝启动）
 ├── scripts/
 │   ├── regression.mjs      # 展示页回归：file:// + 真浏览器，7 组 / 31 条断言
-│   ├── api-test.mjs        # 接口回归：真实 HTTP，22 组 / 254 条断言（19 组支付、20 组价格、21 组公开接口、22 组 Bearer）
+│   ├── api-test.mjs        # 接口回归：真实 HTTP，22 组 / 266 条断言（19 组支付、20 组价格、21 组公开接口、22 组 Bearer）
 │   ├── concurrency-test.mjs  # 并发抢位：单进程 8 并发 + 双进程 TOCTOU，2 组 / 7 条
 │   ├── race-worker.cjs       # 上面的双进程子进程（故意写「读→延迟→写」的竞态）
 │   ├── e2e.mjs               # 端到端：真服务 + 真浏览器点按钮，9 组 / 45 条（含 Network 自检）
@@ -452,7 +452,7 @@ grep -rn "待填充" *.html
 
 ## 6. 回归验证（第一阶段：展示页交互）
 
-用 Edge 无头浏览器 + DevTools 协议在真实浏览器里跑断言：**7 个检查组、31 条断言，全部通过**。接口回归（22 组 / 254 条）在 §10.7，两套脚本互不替代：这一套验前端交互，那一套验服务端权限。
+用 Edge 无头浏览器 + DevTools 协议在真实浏览器里跑断言：**7 个检查组、31 条断言，全部通过**。接口回归（22 组 / 266 条）在 §10.7，两套脚本互不替代：这一套验前端交互，那一套验服务端权限。
 
 “组”和“条”是两个口径：**一条断言 = 一个 `check()`**，一组 = 一类交互场景，一组里通常有 3–6 条断言。下面的表按**组**列（7 行），组内断言数见最后一列，7 组相加 = 31。
 
@@ -559,7 +559,7 @@ node scripts/regression.mjs --json   # 另外写 scripts/regression-result.json
 | 数据由 JS 渲染 | `doctors.html` 的医师卡、`contact.html` 的信息卡与营业时间表、`appointment.html` 的下拉选项，在 HTML 源码里都是空容器 | 不执行 JS 的爬虫拿不到这部分内容。缓解：服务正文、价格区间、FAQ、机构介绍仍是静态 HTML，`<title>`/`description` 手写并含本地词。要彻底解决需改为构建期静态化或服务端渲染 |
 | 预约表单有两条路径 | 未登录时仍是纯前端演示（不发送、不落库）；登录后的病人走真实接口，写本地 SQLite | 同一页面两套行为，靠 `window.LSD_BOOKING.active` 区分。改动时要同时跑展示页回归（31 条）与接口/端到端回归，否则容易只顾一头 |
 | 号源粒度是「一个时段一个人」 | 没有容量概念（同一时段不能放 3 个号），也不能改期，只能取消后重约 | 要支持需给 `schedules` 加 `capacity`、给 `appointments` 加序号，防双订索引也要跟着改 |
-| 时间按服务器本地时区计算 | `slotStartMs()` 用 `new Date('YYYY-MM-DDTHH:MM:00')` 拼时间，**不带时区后缀**，因此按运行机器的本地时区解析。24 小时取消规则、`SLOT_IN_PAST` 判定、`date` 比较全部基于这个基准 | 单机房演示没问题。**多时区部署必须改造**：库里存 UTC 时间戳（或带 offset 的 ISO 串），服务端比较一律用 UTC，展示层再按用户时区格式化；否则「病人在 UTC+8 看到 09:00，服务器按 UTC 判断成 17:00」 |
+| 时间按服务器本地时区计算 | `slotStartMs()` 用 `new Date('YYYY-MM-DDTHH:MM:00')` 拼时间，**不带时区后缀**，因此按运行机器的本地时区解析。取消规则（时段是否已开始）、`SLOT_IN_PAST` 判定、`date` 比较全部基于这个基准 | 单机房演示没问题。**多时区部署必须改造**：库里存 UTC 时间戳（或带 offset 的 ISO 串），服务端比较一律用 UTC，展示层再按用户时区格式化；否则「病人在 UTC+8 看到 09:00，服务器按 UTC 判断成 17:00」 |
 | 无真实地图 | 联系页地图位是虚线占位块 | 接入地图需用具备测绘资质、带审图号的服务，且坐标与门牌要真实，否则不如不放 |
 | 演示性文案 | 「勾选即同意」「30 分钟内回电」等是流程示意 | 不能当作真实服务承诺阅读 |
 | 支付是**模拟**的 | 没有真实资金流、没有对账文件、没有退款审批、没有票据；「支付」只是本地一条 `UPDATE` | 这是刻意的：接真实通道需要商户资质、密钥托管、回调验签、退款风控与 PCI 合规，本作业不碰。真要接，必须由持牌收单机构提供 SDK 与服务端回调，且金额仍由服务端算 |
@@ -618,14 +618,14 @@ node scripts/regression.mjs --json   # 另外写 scripts/regression-result.json
 | `data.js` 空值字段 | 13 | 递归遍历 `SITE_DATA`，值恰为 `''` 或 `null` 的**字段**个数 | 见下方脚本 |
 | `*Pending` 布尔标记 | 8 | 4 位医师 ×（`yearsPending` + `schedulePending`），标记「值有内容但待核」，**与 13 个空值无重叠** | `grep -c "Pending: true" assets/js/data.js` |
 | 展示页回归组 / 断言 | 7 / 31 | `scripts/regression.mjs`：一个 `GROUP` 段落 = 1 组，一次 `check()` = 1 条。第六期第 6 组 +2 条（服务页价格渲染） | 脚本末尾「按组汇总」 |
-| 接口回归组 / 断言 | 22 / 254 | `scripts/api-test.mjs`；第 7–11 组第二期、12–16 组第三期、17 组第四期（no_show 释放 + reopen）、18 组日志、**19 组第五期模拟支付（45 条）**、**20 组第六期价格单一来源（5 条）**、**21 组第七期小程序公开接口（15 条）**、**22 组第八期 Bearer 通道（32 条）** | `npm run test:api` 末尾汇总 |
+| 接口回归组 / 断言 | 22 / 266 | `scripts/api-test.mjs`；第 7–11 组第二期、12–16 组第三期、17 组第四期（no_show 释放 + reopen）、18 组日志、**19 组第五期模拟支付 + 第九期取消退款联动（54 条）**、**20 组第六期价格单一来源（5 条）**、**21 组第七期小程序公开接口（15 条）**、**22 组第八期 Bearer 通道（32 条）** | `npm run test:api` 末尾汇总 |
 | 并发回归组 / 断言 | 2 / 7 | `scripts/concurrency-test.mjs`；A 组单进程 8 并发、B 组双进程 TOCTOU | `npm run test:race` 末尾汇总 |
 | 端到端回归组 / 断言 | 9 / 45 | `scripts/e2e.mjs`：真服务 + 真浏览器，一个 `group()` = 1 组，一次 `check()` = 1 条；第 7 组含 Network 自检，第 8 组验医生端支付状态 | `npm run test:e2e` 末尾汇总 |
 | 小程序静态体检组 / 断言 | 6 / 46 | `scripts/miniprogram-check.mjs`：结构 9 + 无 DOM 6 + 数据来源 3 + 网络层与 token 10 + 认证与预约页 16 + WXSS 2 | `npm run test:mp` 末尾汇总 |
 | 小程序页面模拟组 / 断言 | 7 / 44 | `scripts/miniprogram-mock.mjs`：wx 垫片跑真实 `onLoad` / 点击处理，覆盖「未登录 → 注册 → 登录 → 预约 → 取消 → token 过期」 | `npm run mock:mp` 末尾汇总 |
 | 小程序页面数 | 9 | 5 个 tab + 服务详情 + 我的预约 + 登录 + 注册（后 4 个都是 `navigateTo` / `reLaunch`，不在 tabBar） | `miniprogram/app.json` 的 `pages` 长度 |
 | 小程序文件数 | 44 | 根级 6（`app.js`/`app.json`/`app.wxss`/`config.js`/`project.config.json`/`sitemap.json`）+ `utils` 2 + 9 页 × 四件套 36。**不含**开发者工具首次导入后自动生成的 `project.private.config.json`（本地配置，已在 `.gitignore` 排除） | `find miniprogram -type f ! -name project.private.config.json \| wc -l` |
-| 六套断言合计 | 427 | 254 + 7 + 31 + 45 + 46 + 44；**这是「断言条数」不是「测试用例数」**，一次 `check()` 记 1 条，一个 `group()` 记 1 组（合计 53 组） | `npm run test:all` 六段「按组汇总」相加 |
+| 六套断言合计 | 439 | 266 + 7 + 31 + 45 + 46 + 44；**这是「断言条数」不是「测试用例数」**，一次 `check()` 记 1 条，一个 `group()` 记 1 组（合计 53 组） | `npm run test:all` 六段「按组汇总」相加 |
 | token 有效期 | 2 小时 | `server/jwt.js` 的 `TTL_SECONDS = 7200`，与 Web 会话 `maxAge` 同值；断言 `exp - iat === 7200` | `npm run test:api` 第 22 组 |
 | 小程序本地存储 | 1 个键 | 只有 `token`（`wx.setStorageSync('token')`）；**不存密码**、不存用户资料 | `grep -n "StorageSync" miniprogram/utils/request.js` |
 | 小程序公开接口 | 3 | `/api/public/clinic`、`/doctors`、`/services`；免登录、只读、60 次/分钟/来源 | `server/routes/public.js` |
@@ -636,7 +636,7 @@ node scripts/regression.mjs --json   # 另外写 scripts/regression-result.json
 | 预约状态 | 5 | pending / confirmed / cancelled / completed / no_show，由 `CHECK` 约束 | 见 `server/db.js` 的 `appointments` 建表语句 |
 | 订单状态 | 3 | unpaid / paid / refunded，由 `CHECK` 约束；`paid_at` / `refunded_at` 与状态强一致（另有两条 `CHECK`） | 见 `server/db.js` 的 `orders` 建表语句 |
 | 订单金额口径 | 整数分 | 库里存 `amount_cents`（如 `28000`），**不是元、不是浮点**；展示串 `¥280.00` 只用于显示 | `SELECT amount_cents FROM orders` |
-| 合法状态转换 | 7 | 见 §11.2 的表：#1–#7 七条（含第四期新增的 `no_show → confirmed`）。`#8`「任何 → pending」不存在，只是列出来说明「没有回退入口」 | §11.2 转换表 |
+| 合法状态转换 | 8 | 见 §11.2 的表：#1–#8 八条（含第四期 `no_show → confirmed`、第九期 `completed → confirmed` 撤销完成）。`#9`「任何 → pending」不存在，只是列出来说明「没有回退入口」 | §11.2 转换表 |
 | 非法状态转换断言 | 8 | 每种「源状态 × 目标动作」组合一条，全部断言 409 `BAD_STATE`。另有 4 条 reopen 的边界断言（非本人 403 / 病人 403 / 不存在 404 / 非 no_show 409）在第 17 组 | `npm run test:api` 第 13 组 |
 | 医师数 | 4 | `data.js` 的 `doctors[]` 长度（展示层） | `SITE_DATA.doctors.length` |
 | 预约项目 | 8 | `services[]` 长度；下拉显示 9 项 = 8 项 + 「请选择」占位 | `SITE_DATA.services.length` |
@@ -708,7 +708,7 @@ console.log('orders', d.prepare('SELECT COUNT(*) n FROM orders').get().n)"
 npm install        # 装依赖
 npm start          # 起服务，默认 http://localhost:3000
 npm run reset-db   # 清空并重建数据库（回到 5 个种子账号）
-npm run test:api    # 接口回归：22 组 / 254 条（19 组支付、20 组价格、21 组公开接口、22 组 Bearer）
+npm run test:api    # 接口回归：22 组 / 266 条（19 组支付、20 组价格、21 组公开接口、22 组 Bearer）
 npm run test:race   # 并发抢位：2 组 / 7 条（多进程）
 npm run test:ui     # 展示页回归：7 组 / 31 条（需要浏览器）
 npm run test:e2e    # 端到端：真服务 + 真浏览器，9 组 / 45 条（需要浏览器，含 Network 自检）
@@ -800,7 +800,7 @@ CREATE TABLE users (
 
 统一约定：成功返回 `{ user }` 或 `{ users }`，失败返回 `{ error: "中文提示" }`；**任何响应都不含 `password_hash`**。
 
-> 第二期起的预约接口见 §11.6，第三期医生端状态流转见 §12.2，第五期订单与模拟支付接口见 §16.4。
+> 第二期起的预约接口见 §11.8，第三期医生端状态流转见 §12.2，第五期订单与模拟支付接口见 §16.4。
 
 ### 10.6 安全设计
 
@@ -821,7 +821,7 @@ CREATE TABLE users (
 
 **本期没做的**（写在这里，避免误以为有）：CSRF token（只靠 `sameSite=lax`）、HTTPS（本地 http）、会话持久化（`MemoryStore`，重启掉线）、登录审计表、验证码、密码找回、医生材料上传与人工核验。
 
-### 10.7 接口回归：22 组 / 254 条（第 7–11 组第二期、12–17 组第三/四期、18–20 组第五/六期、21 组第七期、22 组第八期）
+### 10.7 接口回归：22 组 / 266 条（第 7–11 组第二期、12–17 组第三/四期、18–20 组第五/六期、21 组第七期、22 组第八期）
 
 `scripts/api-test.mjs` 会另起一个服务进程（端口 3101）+ 临时库（`.workbuddy/test.db`），用真实 HTTP 请求跑断言，**关键的「角色」断言还会直接查库核对 `role` 列**。跑完自动删库，不污染 `data/app.db`。
 
@@ -837,7 +837,7 @@ CREATE TABLE users (
 | 8 | 预约：可约时段与提交（含 409 / 404 / 400 分支） | 11 | ✅ 11/11 |
 | 9 | 并发防重：同一时段只成功一个 | 5 | ✅ 5/5 |
 | 10 | 对象级越权（病人 A vs 病人 B / 医生 A vs 医生 B） | 7 | ✅ 7/7 |
-| 11 | 取消与 24 小时规则 | 6 | ✅ 6/6 |
+| 11 | 取消规则：时段开始前可取消 | 8 | ✅ 8/8 |
 | 12 | 医生状态流转：确认 → 完成 / 未到诊（第三期） | 8 | ✅ 8/8 |
 | 13 | 非法状态转换：全部拒绝（第三期） | 14 | ✅ 14/14 |
 | 14 | 病人预约详情（第三期） | 9 | ✅ 9/9 |
@@ -907,7 +907,7 @@ CREATE TABLE appointments (
   note         TEXT,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   cancelled_at TEXT,
-  -- 取消必须有时间戳；没取消就不许有。否则 24 小时规则与统计都会被脏数据带偏
+  -- 取消必须有时间戳；没取消就不许有。否则取消规则与统计都会被脏数据带偏
   CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL))
 );
 
@@ -929,14 +929,15 @@ CREATE UNIQUE INDEX ux_appt_active_slot
 
 ### 11.2 预约状态机
 
-五个状态、七条合法转换。**第三期把 `confirmed / completed / no_show` 从虚线改成了实线**，**第四期给 `no_show` 补了唯一一条出边 `reopen`**——它不再是死胡同。
+五个状态、**八条**合法转换。第三期把 `confirmed / completed / no_show` 从虚线改成了实线，第四期给 `no_show` 补了 `reopen`，第九期又给 `completed` 补了 `revert`（撤销完成），并给「完成」加了时间闸门。
 
 ```
-pending ──confirm──▶ confirmed ──complete──▶ completed（终态）
-   │                    │
-   │ cancel（≥24h）      ├──no-show──▶ no_show ──reopen──▶ confirmed（回到上行）
+pending ──confirm──▶ confirmed ──complete──▶ completed
+   │                    │   ▲                    │
+   │ cancel（未开始）     │   └─────revert────────┘   （仅时段未开始）
+   │                    ├──no-show──▶ no_show ──reopen──▶ confirmed
    ▼                    │
-cancelled（终态）◀───────┘  cancel（≥24h）
+cancelled（终态）◀───────┘  cancel（未开始）
 ```
 
 **谁能触发哪个转换**（这张表就是服务端的判断依据，不是文档装饰）：
@@ -945,15 +946,18 @@ cancelled（终态）◀───────┘  cancel（≥24h）
 | --- | --- | --- | --- | --- | --- |
 | 1 | （无）→ `pending` | 病人本人 | `POST /api/appointments` | 时段存在、`open`、未开始、未被占 | ✅ |
 | 2 | `pending` → `confirmed` | 该预约的医生 | `POST /api/doctor/appointments/:id/confirm` | 只能是 `pending` | ✅ |
-| 3 | `confirmed` → `completed` | 该预约的医生 | `POST /api/doctor/appointments/:id/complete` | 只能是 `confirmed` | ✅ |
+| 3 | `confirmed` → `completed` | 该预约的医生 | `POST /api/doctor/appointments/:id/complete` | 只能是 `confirmed`；**时段已开始**（否则 `409 TOO_EARLY`） | ✅ 第九期加时间闸门 |
 | 4 | `confirmed` → `no_show` | 该预约的医生 | `POST /api/doctor/appointments/:id/no-show` | 只能是 `confirmed` | ✅ |
 | 5 | `no_show` → `confirmed` | 该预约的医生 | `POST /api/doctor/appointments/:id/reopen` | 只能是 `no_show`；时段未被别人重约 | ✅ 第四期新增 |
-| 6 | `pending` → `cancelled` | 病人本人 | `POST /api/appointments/:id/cancel` | 距开始 ≥ 24h | ✅ |
-| 7 | `confirmed` → `cancelled` | 病人本人 | 同上 | 距开始 ≥ 24h | ✅ |
-| 8 | 任何 → `pending` | — | — | 没有「回到待确认」的入口 | ❌ 不存在 |
-| — | `cancelled` / `completed` → 任何 | — | — | 两个终态不可复活 | ❌ 拒绝 |
+| 6 | `pending` → `cancelled` | 病人本人 | `POST /api/appointments/:id/cancel` | **时段还没开始** | ✅ |
+| 7 | `confirmed` → `cancelled` | 病人本人 | 同上 | **时段还没开始** | ✅ |
+| 8 | `completed` → `confirmed` | 该预约的医生 | `POST /api/doctor/appointments/:id/revert` | 只能是 `completed`；**时段还没开始**（已开始的拒绝） | ✅ 第九期新增 |
+| 9 | 任何 → `pending` | — | — | 没有「回到待确认」的入口 | ❌ 不存在 |
+| — | `cancelled` → 任何 | — | — | `cancelled` 是真正的终态 | ❌ 拒绝 |
 
 `no_show` **不是终态**：它是医生对「这次没来」的标记，可能标错，所以留了 `reopen` 一条纠错边。它也不是「可取消」的状态——病人不能取消一条已经判定为未到诊的记录，要改只能由医生操作。
+
+`completed` 也不再是绝对终态，但只对「时段还没开始」开放 `revert`：那是明显的误操作（诊疗一天都还没发生）。已经开始的诊疗记录不许改回去。
 
 **非法转换一律 409 `BAD_STATE`**，响应带 `{ status, status_label, expected }`，前端不用解析中文文案。当前 8 种组合都有断言（见 §12.5）：
 
@@ -962,7 +966,7 @@ cancelled（终态）◀───────┘  cancel（≥24h）
 | `pending` → `complete` | 没确认就完成，跳过了医生确认这一步 |
 | `pending` → `no-show` | 没确认就不存在「患者没来」 |
 | `cancelled` → `confirm` / `complete` | 已取消的时段已被别人订走，复活会造成双订 |
-| `completed` → `confirm` / `complete` | 已完成是终态 |
+| `completed` → `confirm` / `complete` | 已完成不能再确认或再完成一次；要纠正只能走 `revert`（且时段必须还没开始） |
 | `no_show` → `confirm` / `complete` | `no_show` 的唯一合法出边是 `reopen`；要回到可推进状态必须先 reopen |
 
 三层保证：**路由判状态**（409 BAD_STATE）→ **SQL 的 WHERE 带原状态**（`AND status = 'pending'`，并发下 changes=0）→ **数据库 CHECK**（只允许五个合法值）。少任何一层都能被绕过。
@@ -970,15 +974,50 @@ cancelled（终态）◀───────┘  cancel（≥24h）
 `reopen` 还多一种冲突：`no_show` 已经把号源放出去了，如果这个时段**已经被别人重新约走**，把原记录改回 `confirmed` 就会撞 `ux_appt_active_slot`。这一条不能报 `BAD_STATE`（状态是对的，是号源没了），单独返回 **409 `SLOT_REBOOKED`**。
 
 
-### 11.3 24 小时取消规则
+### 11.3 取消规则：时段开始前可取消（第九期修订）
 
 - 判定基准是**时段开始时刻**（`date + start_time` 按本地时间拼），不是预约创建时刻。
-- `开始时间 - 现在 >= 24h` 才允许自助取消，否则 `409 TOO_LATE_TO_CANCEL`，响应里带 `hours_left` 便于前端直接展示。
-- 已开始的时段同样返回 `TOO_LATE_TO_CANCEL`（`hours_left = 0`）。
-- 规则在服务端判断；前端只是提前把按钮换成「距开始不足 24 小时，请电话联系门诊」的说明，**不是**靠隐藏按钮来限制。
-- 为什么是 24 小时：这是门诊运营口径，不是技术限制。真实业务里通常还会叠加「爽约次数」与人工改期通道，本期没做。
+- **只要时段还没开始**就允许自助取消；已经开始的一律 `409 ALREADY_STARTED`。
+- `cancel_rule` 里给 `minutes_left` / `hours_left` / `cancellable` / `reason`，前端只做翻译，不自己算时间。
+- **取消已支付的预约时，订单在同一个事务里变成 `refunded`**（见 §11.4），响应带 `refund` 字段。
 
-### 11.4 并发防重：为什么不在应用层写 if
+**为什么把「开始前 24 小时内不可取消」这条规则删掉了**：它假设用户提前几天预约，但演示里几乎所有人都是「今天约明天」。一条 11-25 11:24 提交、11-26 09:00 开始的预约，提交时距开始只有 21 小时 36 分——**从预约成功的那一秒起就取消不了**，规则比它想防的问题更伤人。现在临期爽约交给门诊侧用电话改期处理，不再用它卡住所有预约。
+
+### 11.4 取消与退款联动（第九期新增）
+
+只把预约改成 `cancelled`、订单留在 `paid`，会留下「人不来了、钱还挂着」的半截状态，病人还得自己再找退款按钮——而那个入口此前恰好是断的。
+
+现在两条 UPDATE 在**同一个事务**里（`cancelWithRefund`）：
+
+| 订单状态 | 取消后的行为 |
+|---|---|
+| 没有订单 | 只取消 |
+| `unpaid` | 只取消（没付过钱，没有可退的） |
+| `paid` | 取消 + 退款（`refunded_at` 落时间戳） |
+| `refunded` | 只取消（不重复退） |
+
+响应：`{ ok:true, id, status:'cancelled', refund: { order_id, amount_cents, amount_text, status:'refunded', simulated:true } | null }`。前端据此提示「已取消，¥280.00 已退回（模拟）」。
+
+另有两条配套改动：
+- `POST /api/patient/appointments/:id/order` 把「已有订单就直接返回」提到状态检查**之前**。否则 `completed` / `cancelled` 的预约进支付页会直接 409，拿不到订单，退款按钮根本不渲染——功能存在但永远点不到。
+- Web 端「我的预约」里，已支付的预约不再只显示一行文字，而是给出「查看 / 退款」入口进 `payment.html`。
+
+### 11.5 医生端时间闸门与「撤销完成」（第九期新增）
+
+状态机只回答「这条记录现在是什么状态」，回答不了「现在该不该做这个动作」。原来医生可以在任何时刻把一条**明天上午**的预约标成 `completed`，病人因此不能取消、也退不了款。
+
+现在加了两道时间闸门：
+
+| 动作 | 闸门 | 错误码 |
+|---|---|---|
+| `completed` ← `confirmed` | 时段必须**已经开始** | `409 TOO_EARLY` |
+| `confirmed` ← `completed`（撤销完成） | 时段必须**还没开始** | `409 ALREADY_STARTED` |
+
+`revert` 是新增的第 8 条合法边，只给「时段还没开始却被标完成」的误操作兜底：没有它，一条误标的记录同时锁死三件事（不能取消、不能退款、单子结不掉）。已经开始的诊疗记录不许改回去。
+
+前端在 `completed` 且时段未开始时显示「撤销完成」按钮；服务端仍会独立校验，不依赖前端。
+
+### 11.6 并发防重：为什么不在应用层写 if
 
 **错误做法（有竞态）**：
 
@@ -1013,7 +1052,7 @@ B 和 C 是关键：它们证明「即使应用层判断被删掉、或者换成
 
 `scripts/race-worker.cjs` 就是 B 里的那个子进程，故意写成「读 → 睡 → 写」的经典 TOCTOU 形态。
 
-### 11.5 对象级权限（比 requireRole 更细的一层）
+### 11.7 对象级权限（比 requireRole 更细的一层）
 
 `requireRole('patient')` 只回答「你是不是病人」。它回答不了「这条预约是不是你的」——病人 A 和病人 B 都是 `patient`，角色校验对两人都放行。所以每个涉及具体资源的接口都要再比一次 id：
 
@@ -1034,7 +1073,7 @@ B 和 C 是关键：它们证明「即使应用层判断被删掉、或者换成
 4. 医生 A 查排班时传 `?doctor_id=<医生B>` → 结果与不传完全相同（参数被忽略）。
 5. 正畸医生看不到种植科医生的那条预约；种植科医生能看到属于自己的那条（正向也验，避免「全都拦」被误判成通过）。
 
-### 11.6 新增 API
+### 11.8 新增 API
 
 | 方法 | 路径 | 权限 | 说明 | 主要错误码 |
 | --- | --- | --- | --- | --- |
@@ -1043,17 +1082,18 @@ B 和 C 是关键：它们证明「即使应用层判断被删掉、或者换成
 | POST | `/api/appointments` | 病人 | 提交预约，body `{ schedule_id, note }` | 400 `BAD_SCHEDULE_ID` / `NOTE_TOO_LONG` / **`SLOT_IN_PAST`**；404 `SLOT_NOT_FOUND`；409 `SLOT_TAKEN` / `SLOT_CLOSED` |
 | GET | `/api/patient/appointments` | 病人 | 我的预约（仅自己） | 401 / 403 |
 | GET | `/api/patient/appointments/:id` | 病人 | **第三期新增**。预约详情：医生姓名 / 科室 / 时段 / 状态 / 剩余小时数 / 取消规则 | 400 `BAD_ID`；403 `NOT_OWNER`；404 `NOT_FOUND` |
-| POST | `/api/appointments/:id/cancel` | 病人 | 取消自己的预约 | 403 `NOT_OWNER`；404 `NOT_FOUND`；409 `ALREADY_CANCELLED` / `NOT_CANCELLABLE` / `TOO_LATE_TO_CANCEL` / `STATE_CHANGED` |
+| POST | `/api/appointments/:id/cancel` | 病人 | 取消自己的预约 | 403 `NOT_OWNER`；404 `NOT_FOUND`；409 `ALREADY_CANCELLED` / `NOT_CANCELLABLE` / `ALREADY_STARTED` / `STATE_CHANGED`；成功时响应带 `refund` |
 | GET | `/api/doctor/appointments` | 医生 | 我的患者预约（仅自己） | 401 / 403 |
 | POST | `/api/doctor/appointments/:id/confirm` | 医生 | **第三期新增**。`pending` → `confirmed` | 400 `BAD_ID`；403 `NOT_OWNER`；404 `NOT_FOUND`；409 `BAD_STATE` / `STATE_CHANGED` |
-| POST | `/api/doctor/appointments/:id/complete` | 医生 | **第三期新增**。`confirmed` → `completed` | 同上 |
+| POST | `/api/doctor/appointments/:id/complete` | 医生 | **第三期新增**。`confirmed` → `completed`；**第九期起要求时段已开始** | 400 `BAD_ID`；403 `NOT_OWNER`；404 `NOT_FOUND`；409 `BAD_STATE` / **`TOO_EARLY`** / `STATE_CHANGED` |
 | POST | `/api/doctor/appointments/:id/no-show` | 医生 | **第三期新增**。`confirmed` → `no_show`（同时释放号源） | 同上 |
 | POST | `/api/doctor/appointments/:id/reopen` | 医生 | **第四期新增**。`no_show` → `confirmed`，纠错用 | 400 `BAD_ID`；403 `NOT_OWNER`；404 `NOT_FOUND`；409 `BAD_STATE` / **`SLOT_REBOOKED`** |
+| POST | `/api/doctor/appointments/:id/revert` | 医生 | **第九期新增**。`completed` → `confirmed`（撤销完成），仅限时段还没开始 | 400 `BAD_ID`；403 `NOT_OWNER`；404 `NOT_FOUND`；409 `BAD_STATE` / **`ALREADY_STARTED`** |
 | GET | `/api/doctor/schedules?date=` | 医生 | 自己的排班与占用情况（doctor_id 取 session） | 400 `BAD_DATE` |
 
-错误响应统一为 `{ error: "中文提示", code: "MACHINE_CODE" }`，前端按 `code` 分支，不靠匹配中文文案。上表合计 12 条，与 §9 的 **21** 个 `/api/*` 端点一致（另 9 条是第一期的认证与管理接口）。
+错误响应统一为 `{ error: "中文提示", code: "MACHINE_CODE" }`，前端按 `code` 分支，不靠匹配中文文案。上表合计 13 条，与 §9 的 **22** 个 `/api/*` 端点一致（另 9 条是第一期的认证与管理接口）。
 
-### 11.7 前端改造
+### 11.9 前端改造
 
 | 文件 | 改动 |
 | --- | --- |
@@ -1068,7 +1108,7 @@ B 和 C 是关键：它们证明「即使应用层判断被删掉、或者换成
 
 一个取舍：`appointments` 表没有 `service` 列，但预约页的项目是必填项。做法是把项目名拼进 `note`（`项目：牙齿矫正｜<用户备注>`，截断 200 字），避免「选了却不落库」。代价是结构化查询项目需要解析备注——本期不做统计，可以接受；要正经做得加 `service_id` 列。
 
-### 11.8 本轮安全加固（三个击穿点实测 + 修复）
+### 11.10 本轮安全加固（三个击穿点实测 + 修复）
 
 #### 11.8.1 静态文件泄露
 
@@ -1146,9 +1186,9 @@ app.get('/:page', (req,res,next) => {
 
 结论：**服务端不转义、只做长度校验；渲染层一律 `textContent`**。这条分工要写进约定——如果哪天有人为了「显示备注里的换行」改成 `innerHTML`，XSS 就会回来。
 
-### 11.9 回归（第二期快照；最新数字见 §16.7）
+### 11.11 回归（第二期快照；最新数字见 §16.7）
 
-> 下表是第二期收尾时的值。之后每期都往上加了断言：第四期 17 组、第五期 19 组 / 194 条、第六期 20 组 / 207 条、第七期 21 组 / 222 条、第八期 22 组 / 254 条。**要看当前值请直接看 §9 的口径表。**
+> 下表是第二期收尾时的值。之后每期都往上加了断言：第四期 17 组、第五期 19 组 / 194 条、第六期 20 组 / 207 条、第七期 21 组 / 222 条、@@HIST266@@。**要看当前值请直接看 §9 的口径表。**
 
 | 脚本 | 内容 | 结果 |
 | --- | --- | --- |
@@ -1159,7 +1199,7 @@ app.get('/:page', (req,res,next) => {
 
 端到端脚本现已归档为 `scripts/e2e.mjs`（`npm run test:e2e`），第四期补了「未到诊 → 恢复」一组，共 7 组 / 24 条。它跑的流程是：注册 → 登录 → 预约页出现绿色登录条、姓名手机号只读 → 选医师与日期后拉到 4 个可约时段 → 提交得到「已提交：2026-11-30 09:00–10:00，状态「待确认」」→ 控制台出现 1 条「待确认」→ 点取消出现行内二次确认、状态不变 → 点「再想想」确认区消失 → 再点取消并确认，状态变「已取消」、提示「该时段已重新放出」。
 
-### 11.10 本期未做（第二期结束时）
+### 11.12 本期未做（第二期结束时）
 
 > 前两条已在第三期完成，见 §12；其余仍未做。
 
@@ -1253,12 +1293,12 @@ WHERE id = ? AND doctor_id = ? AND status = 'pending'
     "id": 12, "status": "pending", "status_label": "待确认",
     "date": "2026-12-05", "start_time": "09:00", "end_time": "10:00",
     "doctor": { "id": 2, "name": "刘主任", "dept": "种植科" },
-    "cancel_rule": { "window_hours": 24, "hours_left": 273, "cancellable": true, "reason": "OK" }
+    "cancel_rule": { "minutes_left": 16380, "hours_left": 273, "cancellable": true, "reason": "OK" }
   }
 }
 ```
 
-`reason` 四选一：`OK` / `TOO_LATE_TO_CANCEL` / `NOT_CANCELLABLE` / `ALREADY_CANCELLED`。前端只负责翻译成中文，**不自己算 24 小时**——两边各算一遍迟早会算出不同结果。
+`reason` 四选一：`OK` / `ALREADY_STARTED` / `NOT_CANCELLABLE` / `ALREADY_CANCELLED`。前端只负责翻译成中文，**不自己算时间**——两边各算一遍迟早会算出不同结果。
 
 ### 12.4 前端
 
@@ -1515,7 +1555,7 @@ function slotStartMs(date, startTime) {
 ```
 
 - **不带时区后缀的 ISO 串，JavaScript 按「运行环境的本地时区」解析**，不是 UTC。所以判定基准是「**服务器所在机器的本地时区**」。
-- 24 小时取消规则、`SLOT_IN_PAST`、`date` 的字符串比较全部基于这个基准；页面展示的日期时间也是同一套本地时间，所以单机演示不会出现前后不一致。
+- 取消规则（时段是否已开始）、`SLOT_IN_PAST`、`date` 的字符串比较全部基于这个基准；页面展示的日期时间也是同一套本地时间，所以单机演示不会出现前后不一致。
 - 代价与改造方向写在 §7「已知取舍」里：**演示站按服务器本地时区计算，多时区部署需改造**（库里存 UTC，比较用 UTC，展示层再按用户时区格式化）。中国全境单一时区，本地演示不受影响。
 
 ---
@@ -1703,7 +1743,7 @@ UPDATE orders SET status = 'paid', paid_at = datetime('now')
 WHERE id = ? AND patient_id = ? AND status = 'unpaid';
 ```
 
-`changes === 0` 说明三件事里有一件不成立（不存在 / 不是本人 / 状态已变）。路由已经分别判过 404 / 403 / 409，走到这里只可能是并发：再读一次，若已是 `paid` 就回 `ALREADY_PAID`。与 §11.4 的抢号是同一个思路——**让数据库裁决，不让 if 裁决**。
+`changes === 0` 说明三件事里有一件不成立（不存在 / 不是本人 / 状态已变）。路由已经分别判过 404 / 403 / 409，走到这里只可能是并发：再读一次，若已是 `paid` 就回 `ALREADY_PAID`。与 §11.6 的抢号是同一个思路——**让数据库裁决，不让 if 裁决**。
 
 **实测：** 连续支付两次，中间隔 1.1 秒（`datetime('now')` 只到秒，不等的话"没被改"可能只是同一秒）：
 
@@ -1751,7 +1791,7 @@ paid_at 仍是 2026-11-23 15:48:39          ← 断言比对的是字符串相�
 
 ### 16.7 回归与证据
 
-**四套脚本（第六期收尾时的快照；第七期新增小程序两套、第八期新增 Bearer 组后，接口总数为 22 组 / 254 条，见 §18.8）**
+**四套脚本（第六期收尾时的快照；第七期新增小程序两套、第八期新增 Bearer 组后，接口总数为 22 组 / 266 条，见 §18.8）**
 
 | 脚本 | 内容 | 结果 |
 | --- | --- | --- |
@@ -1902,7 +1942,7 @@ http 请求 31 条，外部 0 条
 | --- | --- | --- | --- |
 | 一 · 展示站 | 五页静态站、蓝白+浅绿视觉、移动优先；数据化、无障碍、合规口径 | `*.html`、`style.css`、`data.js` / `render.js` / `main.js` | §2–§8 |
 | 二 · 认证与角色 | 注册 / 登录 / 医生申请 / 管理员审核；静态白名单、会话密钥、防 XSS | `server/app.js`、`server/auth.js`、`login/register/dashboard.html` | §10 |
-| 三 · 在线预约 | 排班与预约、并发防重（部分唯一索引）、24 小时取消、对象级权限 | `schedules` / `appointments`、`booking.js` | §11 |
+| 三 · 在线预约 | 排班与预约、并发防重（部分唯一索引）、时段开始前可取消、对象级权限 | `schedules` / `appointments`、`booking.js` | §11 |
 | 四 · 医生闭环 | 五状态状态机、`no_show` 释放号源 + `reopen`、迁移索引修复、E2E 归档 | `doctor/appointments/:id/*`、`scripts/e2e.mjs` | §12–§15 |
 | 五 · 模拟支付 | 订单表、金额只由服务端算、幂等、退款、医生端支付状态、价格单一来源 | `orders`、`pricing.js`、`payment.html/js` | §16 |
 | 六 · 小程序端（阶段一） | 5 页展示迁移 + 服务详情、三个公开只读接口、限流、统一网络层 | `miniprogram/`、`server/routes/public.js`、`rate-limit.js` | §18 |
@@ -1913,7 +1953,7 @@ http 请求 31 条，外部 0 条
 ### 17.4 六套测试怎么跑（四套网站 + 两套小程序）
 
 ```bash
-npm run test:api    # 22 组 / 254 条：真实 HTTP + 临时库（端口 3101），含 32 条 Bearer 断言
+npm run test:api    # 22 组 / 266 条：真实 HTTP + 临时库（端口 3101），含 32 条 Bearer 断言
 npm run test:race   #  2 组 /   7 条：单进程 8 并发 + 双进程 TOCTOU
 npm run test:ui     #  7 组 /  31 条：file:// + 真浏览器（导航 / 表单 / 联动 / 价格渲染）
 npm run test:e2e    #  9 组 /  45 条：真服务 + 真浏览器点完整流程（端口 3102 / CDP 9444）
@@ -1952,7 +1992,7 @@ npm run test:all    # 依次跑上面六套
 | `data.js` 空值字段（13 个）与待核布尔标记（8 个） | §5.2、§4.2 |
 | 数字口径（每个数字怎么数出来的） | §9 |
 | 已知取舍（时区、号源粒度、无地图、演示文案、模拟支付…） | §7 |
-| 各阶段明确没做的 | §10.8、§11.10、§12.6、§16.8 |
+| 各阶段明确没做的 | §10.8、§11.12、§12.6、§16.8 |
 | `no_show` 爽约费 | §16.2 与 §16.8：**本期不做** |
 | `refunded` 是否终态 | §16.2：是终态，完整出边表在那里 |
 | 价格改哪里 / 为什么只有一份 | §16.3：只改 `assets/js/data.js`，改完重启 |
@@ -1988,7 +2028,7 @@ npm run reset-db          # 回到 5 个种子账号（先停服务，WAL 会占
 
 ---
 
-**项目到此暂时收尾。** 六套回归全绿（254 / 7 / 31 / 45 / 46 / 44），所有未完成项都写明了位置与原因，没有「以后再说」的悬空结论。
+**项目到此暂时收尾。** 六套回归全绿（266 / 7 / 31 / 45 / 46 / 44），所有未完成项都写明了位置与原因，没有「以后再说」的悬空结论。
 
 ---
 
@@ -2160,7 +2200,7 @@ GET /api/public/nothing  → 404 JSON（公开接口就 3 个）
 | `openid` 登录、手机号一键授权、订阅消息 | 都要真实 `appid`、类目审核与隐私协议；本项目不发布 | 不做 |
 | 图片（医师照片 / 门头 / 配图） | 没有可用素材；医疗场景的图片还涉及肖像授权 | 不做（用首字 / 色块代替） |
 | 分享、客服、地图导航 | 发布才有意义；地图另需测绘资质与审图号（官网同样只用占位） | 不做 |
-| 改期（而不是取消后重约） | 改期要「先占新号再释放旧号」的事务语义，接口与状态机都要动 | 未做（现在只能取消后重约，且受 24 小时限制） |
+| 改期（而不是取消后重约） | 改期要「先占新号再释放旧号」的事务语义，接口与状态机都要动 | 未做（现在只能取消后重约） |
 | token 主动吊销 | JWT 无状态，服务端没有「吊销表」；当前靠 2 小时过期 + 每次都回库查 `status` 兜底 | 已知取舍（§18.10 有说明） |
 
 ### 18.8 验证：没有开发者工具也能证明「数据通了」
@@ -2169,7 +2209,7 @@ GET /api/public/nothing  → 404 JSON（公开接口就 3 个）
 
 | 脚本 | 做什么 | 结果 |
 | --- | --- | --- |
-| `npm run test:api` | 第 22 组专测 Bearer 通道：token 能进、角色越界 403、过期 401、改 payload 401、换密钥 401、坏头不回落 cookie、停用即失效、密钥缺失 / 过短拒绝启动 | **第 22 组 32 条 ✅**（全量 22 组 / 254 条） |
+| `npm run test:api` | 第 22 组专测 Bearer 通道：token 能进、角色越界 403、过期 401、改 payload 401、换密钥 401、坏头不回落 cookie、停用即失效、密钥缺失 / 过短拒绝启动 | **第 22 组 32 条 ✅**（全量 22 组 / 266 条） |
 | `npm run test:mp` | 文件级体检：9 页四件套、tabBar 顺序、无 DOM API、无 `<img>`、无外部域名、页面不硬编码电话 / 地址 / 医师名 / 手机号、无第三方 UI 库、token 只在网络层存取、登录 / 预约 / 取消页的结构约束、WXSS 无 `:focus-visible` 与裸 `px` | **6 组 / 46 条 ✅** |
 | `npm run mock:mp` | 最小 `wx` / `Page` / `App` 垫片（含 storage / showModal / reLaunch），require **真实的页面文件**，跑「未登录 → 注册 → 登录 → 预约 → 取消」，再签一个**已过期**的 token 验 401 跳登录 | **7 组 / 44 条 ✅** |
 
@@ -2257,7 +2297,7 @@ test:ui  7 组 / 31 条                            全绿
 test:e2e 9 组 / 45 条                            全绿
 ```
 
-> 口径说明：第 1–21 组里第 7 组（静态资源）与第 21 组（公开接口）本来就不需要登录，其余各组都以 cookie 会话为前提。这里不写「47 条 cookie 断言」这种具体数：脚本里没有人给断言按「是否依赖 cookie」打标签，硬报一个数反而是编的。可信的口径是「第 1–21 组一条没改、222 条全过；加上新增的第 22 组，合计 254 条」。
+> 口径说明：第 1–21 组里第 7 组（静态资源）与第 21 组（公开接口）本来就不需要登录，其余各组都以 cookie 会话为前提。这里不写「47 条 cookie 断言」这种具体数：脚本里没有人给断言按「是否依赖 cookie」打标签，硬报一个数反而是编的。可信的口径是「第 1–21 组一条没改、222 条全过；加上新增的第 22 组，合计 266 条」。
 
 **中间件的判断顺序**（`server/auth.js` 的 `authenticate`）：
 
@@ -2438,7 +2478,7 @@ JWT_SECRET=<64 位 hex> JWT_REQUIRE_ENV=1 SESSION_SECRET=<另一把 64 位 hex> 
 | 诊所信息 / 服务 / 医师 / 项目详情 | ✅ | ✅ | 两端同一份 `data.js`，没有第二套内容 |
 | 病人注册 / 登录 | ✅ | ✅ | 同一个 `/api/register`、`/api/login`；注册一律落 `patient` |
 | 选医师 → 选日期 → 选时段 → 提交预约 | ✅ | ✅ | 同一套 `/api/schedules`、`/api/appointments`，防双订仍靠数据库唯一索引 |
-| 我的预约（列表 / 取消） | ✅ | ✅ | 同一个 `/api/patient/appointments`；取消受同一套 24 小时规则约束 |
+| 我的预约（列表 / 取消） | ✅ | ✅ | 同一个 `/api/patient/appointments`；取消受同一套「时段开始前可取消」规则约束 |
 | 预约详情 / 支付（模拟） | ❌ | ✅ `payment.html` | 见 §19.2 |
 | 医生工作台（确认 / 完成 / 未到诊 / 恢复） | ❌ | ✅ `dashboard.html` | 见 §19.2 |
 | 管理员审核（病人 / 医生申请） | ❌ | ✅ `dashboard.html` | 见 §19.2 |
@@ -2506,7 +2546,7 @@ miniprogram/
 
 | # | 脚本 | 命令 | 组 | 断言 | 覆盖 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 接口回归 | `npm run test:api` | 22 | **254** | 真实 HTTP + 临时库；第 22 组是 Bearer 通道（32 条） |
+| 1 | 接口回归 | `npm run test:api` | 22 | **266** | 真实 HTTP + 临时库；第 22 组是 Bearer 通道（32 条） |
 | 2 | 并发回归 | `npm run test:race` | 2 | **7** | 单进程 8 并发 + 双进程 TOCTOU |
 | 3 | 展示页回归 | `npm run test:ui` | 7 | **31** | `file://` + 真浏览器；导航 / 表单 / 联动 / 价格渲染 |
 | 4 | 端到端回归 | `npm run test:e2e` | 9 | **45** | 真服务 + 真浏览器，含 Network 自检（外部请求 0 条） |
@@ -2514,7 +2554,7 @@ miniprogram/
 | 6 | 小程序页面模拟 | `npm run mock:mp` | 7 | **44** | wx 垫片跑真实 `onLoad`；登录 → 预约 → 取消 + 过期 token 跳登录 |
 
 ```
-合计 254/254 + 7/7 + 31/31 + 45/45 + 46/46 + 44/44 = 427 条断言，全部通过
+合计 266/266 + 7/7 + 31/31 + 45/45 + 46/46 + 44/44 = 439 条断言，全部通过
 六套串跑 npm run test:all → exit 0
 ```
 
@@ -2533,7 +2573,7 @@ miniprogram/
 
 ---
 
-**小程序端阶段二到此收尾。** 病人端链路完整（注册 / 登录 / 预约 / 取消 / 我的预约），医生端与支付明确留在 Web 端，六套回归 427 条断言全绿，没有「以后再说」的悬空项。
+**小程序端阶段二到此收尾。** 病人端链路完整（注册 / 登录 / 预约 / 取消 / 我的预约），医生端与支付明确留在 Web 端，六套回归 439 条断言全绿，没有「以后再说」的悬空项。
 
 ---
 
@@ -2641,7 +2681,7 @@ POST /api/login（带 X-Forwarded-Proto: https）
 - **不做多实例 / 不做持久卷（付费项）**：免费层单实例 + 每次播种，正好适合「老师看演示」；
 - **不发布小程序**：云端只托管网站；小程序地址要在 `config.js` 里手动改成 HTTPS 才能连云端（`DEPLOY.md` §10）；
 - **不碰业务逻辑**：本期只新增 `Dockerfile` / `.dockerignore` 与文档，代码侧仍是路径解析、代理信任、密钥位置、配置外置那四处——
-  权限、状态机、计价、防双订一行没改，六套回归仍是 254 / 7 / 31 / 45 / 46 / 44。
+  权限、状态机、计价、防双订一行没改，六套回归仍是 266 / 7 / 31 / 45 / 46 / 44。
 
 ---
 
@@ -2739,6 +2779,6 @@ x-forwarded-proto: https
 
 ### 21.7 回归（本轮）
 
-`254 / 7 / 31 / 45 / 46 / 44 = 427 条断言 / 53 组`，`npm run test:all` 全绿——
+`266 / 7 / 31 / 45 / 46 / 44 = 439 条断言 / 53 组`，`npm run test:all` 全绿——
 代码改动只涉及 `jwt.js` 的 `iss` 与 `auth.js` 的 `readBearer`，第 1–21 组 222 条一条没改。
 

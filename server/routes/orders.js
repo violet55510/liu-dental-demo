@@ -153,6 +153,16 @@ router.post('/patient/appointments/:id/order', authenticate, requireRole('patien
     return fail(res, 403, 'NOT_OWNER', '这条预约不属于你');
   }
 
+  /* ★ 已有订单 → 直接返回（幂等），这一步必须放在状态检查之前 ★
+     支付页的流程是「先进页面、再确保订单存在」。如果先判预约状态，
+     那么 completed / cancelled 的预约进来会直接 409，页面拿不到订单，
+     连「退款」按钮都不会渲染出来 —— 功能存在但永远点不到（本期修的就是这个）。
+     新建订单才需要「这条预约还能就诊」这个前提，读取已有订单不需要。 */
+  const existing = stmts.orderByAppointment.get(apptId);
+  if (existing) {
+    return res.status(200).json({ order: shapeOrder(existing), created: false });
+  }
+
   if (!ORDERABLE_APPT.has(appt.status)) {
     const label = { cancelled: '已取消', completed: '已完成', no_show: '未到诊' }[appt.status] || appt.status;
     return fail(
@@ -160,12 +170,6 @@ router.post('/patient/appointments/:id/order', authenticate, requireRole('patien
       `预约当前状态是「${label}」，不能创建订单`,
       { status: appt.status }
     );
-  }
-
-  /* 已有订单 → 直接返回（幂等） */
-  const existing = stmts.orderByAppointment.get(apptId);
-  if (existing) {
-    return res.status(200).json({ order: shapeOrder(existing), created: false });
   }
 
   /* 金额来源：预约上记录的服务项目 → 价格表。

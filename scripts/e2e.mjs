@@ -396,6 +396,19 @@ try {
 
   group('3. 已确认 → 完成');
 
+  /* 时间闸门（第七期）：只有「时段已开始」才允许标记完成，
+     否则医生可以把明天的预约今天标成完成（线上就是这么坏的）。
+     这里先把这个时段挪到昨天，模拟「患者已经到诊」。 */
+  {
+    const w = new Database(DB_FILE);
+    const sid = w.prepare('SELECT schedule_id FROM appointments WHERE id = ?').get(appt1.id).schedule_id;
+    w.prepare(`
+      UPDATE schedules SET date = date('now','-1 day'), start_time = '05:00', end_time = '06:00'
+      WHERE id = ?
+    `).run(sid);
+    w.close();
+  }
+
   await click(`.appt-item[data-appt-id="${appt1.id}"] button[data-appt-action="complete"]`);
   await waitFor(`(function(){
     var el = document.querySelector('.appt-item[data-appt-id="${appt1.id}"] .appt-status');

@@ -523,9 +523,14 @@ check('种植科医生能看到属于自己的那条（正向也验）', implant
   'count=' + (implantAppts.json.appointments || []).length);
 
 /* =======================================================
-   11. 取消规则：24 小时窗口 + 状态机
+   11. 取消规则：时段开始前可取消 + 状态机
+   -------------------------------------------------------
+   第七期把「开始前 24 小时内不可取消」换成了「时段已开始才不可取消」。
+   这一组同时守住两件事：
+     - 24 小时内但还没开始 → 必须能取消（旧规则在这里 409，是本期修的点）
+     - 已经开始的时段     → 必须 409 ALREADY_STARTED
    ======================================================= */
-GROUP = '11. 取消与 24 小时规则';
+GROUP = '11. 取消规则：时段开始前可取消';
 
 /* 用可写连接插入两个可控时段，避免依赖运行时刻 */
 const w2 = new Database(DB_FILE);
@@ -541,23 +546,28 @@ function addSlot(doctorId, date, start, end) {
 }
 
 const now = new Date();
-/* 18:00 不在种子模板（09:00 / 10:30 / 14:00 / 15:30）里，避免撞车 */
+/* 18:00 不在种子模板（09:00 / 10:30 / 14:00 / 15:30）里，避免撞车。
+   18 点后顺延到明天，保证这个时段一定还没开始、且距开始不足 24 小时。 */
 const nearDate = now.getHours() >= 18 ? ymd(1) : ymd(0);
 const nearSlotId = addSlot(implant.id, nearDate, '18:00', '19:00');
 const farSlotId = addSlot(implant.id, ymd(6), '11:00', '12:00');
 
 const nearBook = await p1.post('/api/appointments', { schedule_id: nearSlotId });
 const farBook = await p2.post('/api/appointments', { schedule_id: farSlotId });
-check('插入「24 小时内」与「24 小时外」两个时段并各订一单',
+check('插入「距开始不足 24 小时」与「6 天后」两个时段并各订一单',
   nearBook.status === 201 && farBook.status === 201,
   nearBook.status + ' / ' + farBook.status + ' ' + nearBook.text + nearBook.text);
 
+/* ★ 本期核心 ★ 旧规则下这里会是 409 TOO_LATE_TO_CANCEL */
 const nearCancel = await p1.post(`/api/appointments/${nearBook.json.appointment.id}/cancel`);
-check('24 小时内取消 → 409 TOO_LATE_TO_CANCEL', nearCancel.status === 409 && nearCancel.json.code === 'TOO_LATE_TO_CANCEL', nearCancel.text);
-check('错误里带剩余小时数，前端可直接展示', typeof nearCancel.json.hours_left === 'number', nearCancel.text);
+check('距开始不足 24 小时、但时段还没开始 → 允许取消（旧规则的核心问题）',
+  nearCancel.status === 200 && nearCancel.json.status === 'cancelled', nearCancel.text);
+check('未支付订单取消时 refund 为 null（没有付过钱，没有可退的）',
+  nearCancel.json.refund === null, nearCancel.text);
 
 const farCancel = await p2.post(`/api/appointments/${farBook.json.appointment.id}/cancel`);
-check('24 小时外取消 → 200，status=cancelled', farCancel.status === 200 && farCancel.json.status === 'cancelled', farCancel.text);
+check('6 天后的预约取消 → 200，status=cancelled',
+  farCancel.status === 200 && farCancel.json.status === 'cancelled', farCancel.text);
 
 const cancelTwice = await p2.post(`/api/appointments/${farBook.json.appointment.id}/cancel`);
 check('重复取消 → 409 ALREADY_CANCELLED', cancelTwice.status === 409 && cancelTwice.json.code === 'ALREADY_CANCELLED', cancelTwice.text);
@@ -567,6 +577,27 @@ const cancelledRow = db.prepare('SELECT status, cancelled_at FROM appointments W
   .get(farBook.json.appointment.id);
 check('取消后 cancelled_at 有值（CHECK 约束保证状态与时间戳一致）',
   cancelledRow.status === 'cancelled' && !!cancelledRow.cancelled_at, JSON.stringify(cancelledRow));
+
+/* ★ 反向边界 ★ 已经开始的时段不能再自助取消。
+   过去时段没法走 POST /api/appointments（会被 SLOT_IN_PAST 拦），
+   所以先插一个昨天凌晨的排班，再直接写一条预约。 */
+const pastSlotId = addSlot(implant.id, ymd(-1), '03:00', '04:00');
+const p1Row = w2.prepare('SELECT id FROM users WHERE phone = ?').get('13911110001');
+const pastIns = w2.prepare(`
+  INSERT INTO appointments (patient_id, doctor_id, schedule_id, status, note)
+  VALUES (?, ?, ?, 'pending', 'past slot for cancel test')
+`).run(p1Row.id, implant.id, pastSlotId);
+const pastApptId = Number(pastIns.lastInsertRowid);
+
+const pastCancel = await p1.post(`/api/appointments/${pastApptId}/cancel`);
+check('时段已开始 → 409 ALREADY_STARTED（不再用 TOO_LATE_TO_CANCEL）',
+  pastCancel.status === 409 && pastCancel.json.code === 'ALREADY_STARTED', pastCancel.text);
+
+const pastDetail = await p1.get(`/api/patient/appointments/${pastApptId}`);
+const pastRule = pastDetail.json && pastDetail.json.appointment.cancel_rule;
+check('已开始的预约在详情里 cancellable=false, reason=ALREADY_STARTED',
+  !!pastRule && pastRule.cancellable === false && pastRule.reason === 'ALREADY_STARTED',
+  JSON.stringify(pastRule));
 
 w2.close();
 
@@ -587,6 +618,21 @@ check('医生确认自己名下的 pending 预约 → 200, status=confirmed',
 check('确认后库里是 confirmed', statusOf(ownId) === 'confirmed', 'status=' + statusOf(ownId));
 check('响应带 status_label（前端不用自己映射中文）',
   cf.json.appointment.status_label === '已确认', JSON.stringify(cf.json));
+
+/* ★ 时间闸门（第七期新增）★
+   这条预约的时段还在未来，医生不能把它标成「已完成」——
+   之前在线上出现过「明天的预约今天就被标完成」，病人因此既不能取消也不能退款。
+   先证明闸门生效，再把时段挪到过去，让「完成」这件事变得合法。 */
+const earlyComplete = await doc1.post(`/api/doctor/appointments/${ownId}/complete`);
+check('时段还没开始 → 409 TOO_EARLY（不能提前把未来的预约标完成）',
+  earlyComplete.status === 409 && earlyComplete.json.code === 'TOO_EARLY', earlyComplete.text);
+
+const w12 = new Database(DB_FILE);
+const ownScheduleId = db.prepare('SELECT schedule_id FROM appointments WHERE id = ?').get(ownId).schedule_id;
+/* 把这条预约的时段挪到昨天凌晨，模拟「时间到了」 */
+w12.prepare(`UPDATE schedules SET date = ?, start_time = '05:00', end_time = '06:00' WHERE id = ?`)
+  .run(ymd(-1), ownScheduleId);
+w12.close();
 
 const cp = await doc1.post(`/api/doctor/appointments/${ownId}/complete`);
 check('confirmed → 标记完成 → 200, status=completed',
@@ -681,8 +727,8 @@ check('详情含医生姓名与科室', !!det && det.doctor.name === '刘主任'
   det ? JSON.stringify(det.doctor) : '');
 check('详情含时段与状态', !!det && !!det.date && !!det.start_time && !!det.end_time && det.status === 'no_show',
   det ? det.date + ' ' + det.start_time + ' ' + det.status : '');
-check('详情含取消规则：窗口 24 小时 + 距开始小时数',
-  !!det && det.cancel_rule.window_hours === 24 && typeof det.cancel_rule.hours_left === 'number',
+check('详情含取消规则：剩余时间 + 是否可以取消',
+  !!det && typeof det.cancel_rule.minutes_left === 'number' && typeof det.cancel_rule.cancellable === 'boolean',
   det ? JSON.stringify(det.cancel_rule) : '');
 check('未到诊的预约 → 不可取消，原因码 NOT_CANCELLABLE',
   !!det && det.cancel_rule.cancellable === false && det.cancel_rule.reason === 'NOT_CANCELLABLE',
@@ -699,7 +745,7 @@ const badDetailId = await p1.get('/api/patient/appointments/abc');
 check('非数字 id → 400 BAD_ID', badDetailId.status === 400 && badDetailId.json.code === 'BAD_ID', badDetailId.text);
 
 const pendingDetail = await p1.get(`/api/patient/appointments/${pendId}`);
-check('pending 且距开始 >24h → cancellable=true, reason=OK',
+check('pending 且时段未开始 → cancellable=true, reason=OK',
   pendingDetail.status === 200 &&
   pendingDetail.json.appointment.cancel_rule.cancellable === true &&
   pendingDetail.json.appointment.cancel_rule.reason === 'OK',
@@ -1253,6 +1299,74 @@ check('支付页明确写「不产生真实扣款」',
 check('预约列表带 order 字段（前端据此决定是否显示「去支付」）',
   Array.isArray(myOrders.json.orders) && myOrders.json.orders.every(o => !!o.appointment),
   myOrders.text.slice(0, 120));
+
+/* ---------- 19.12 取消 ↔ 退款联动 / 撤销完成（第七期新增） ----------
+   这两条是本期真正要守的行为，必须有断言盯着：
+     - 取消一条已支付的预约，订单要在同一个事务里变成 refunded
+     - 误标成 completed 的预约，医生能撤销（时段未开始才行） */
+async function findFreeSlot(client, fromOffset, toOffset) {
+  for (let off = fromOffset; off <= toOffset; off++) {
+    const r = await client.get(`/api/schedules?doctor_id=${implant.id}&date=${ymd(off)}`);
+    const free = (r.json.slots || []).filter(s => s.open && !s.taken);
+    if (free.length) return free[0].id;
+  }
+  return null;
+}
+
+const linkSlot = await findFreeSlot(p1, 9, 20);
+const linkBook = await p1.post('/api/appointments', { schedule_id: linkSlot, service: 'cleaning' });
+const linkId = linkBook.status === 201 ? linkBook.json.appointment.id : null;
+const linkOrder = await p1.post(`/api/patient/appointments/${linkId}/order`);
+const linkPay = await p1.post(`/api/patient/orders/${linkOrder.json.order.id}/pay`);
+check('取消联动用例：预约 → 下单 → 支付 三步都成功',
+  linkBook.status === 201 && linkOrder.status === 201 && linkPay.status === 200,
+  linkBook.status + '/' + linkOrder.status + '/' + linkPay.status);
+
+const linkCancel = await p1.post(`/api/appointments/${linkId}/cancel`);
+check('取消一条已支付的预约 → 200，且响应里带 refund',
+  linkCancel.status === 200 && !!linkCancel.json.refund && linkCancel.json.refund.status === 'refunded',
+  linkCancel.text);
+check('退款金额取自订单（不接受前端传值）',
+  !!linkCancel.json.refund && linkCancel.json.refund.amount_cents === linkOrder.json.order.amount_cents,
+  linkCancel.text);
+
+const ordersAfter = await p1.get('/api/patient/orders');
+const linkRow = (ordersAfter.json.orders || []).find(o => o.id === linkOrder.json.order.id);
+check('库里订单确实变成 refunded，并写了 refunded_at',
+  !!linkRow && linkRow.status === 'refunded' && !!linkRow.refunded_at,
+  JSON.stringify(linkRow));
+
+/* 这条很关键：已取消的预约如果进不了订单页，病人的退款入口就是断的 */
+const orderAgain = await p1.post(`/api/patient/appointments/${linkId}/order`);
+check('已取消的预约再请求订单 → 200 + created=false（读回已有订单，不再 409）',
+  orderAgain.status === 200 && orderAgain.json.created === false,
+  orderAgain.text);
+
+/* 撤销完成：时段未开始可撤；已开始的不能 */
+const revSlot = await findFreeSlot(p1, 9, 20);
+const revBook = await p1.post('/api/appointments', { schedule_id: revSlot });
+const revId = revBook.json.appointment.id;
+await doc1.post(`/api/doctor/appointments/${revId}/confirm`);
+
+const revEarly = await doc1.post(`/api/doctor/appointments/${revId}/complete`);
+check('未来的预约标记完成 → 409 TOO_EARLY（与第 12 组同一道时间闸门）',
+  revEarly.status === 409 && revEarly.json.code === 'TOO_EARLY', revEarly.text);
+
+/* 直接写库，模拟「修复之前就已经被误标」的存量数据 */
+const w8 = new Database(DB_FILE);
+w8.prepare(`UPDATE appointments SET status = 'completed' WHERE id = ?`).run(revId);
+w8.close();
+
+const rev = await doc1.post(`/api/doctor/appointments/${revId}/revert`);
+check('时段还没开始 → 撤销完成 200，状态回到 confirmed',
+  rev.status === 200 && rev.json.appointment.status === 'confirmed', rev.text);
+
+const revAgain = await doc1.post(`/api/doctor/appointments/${revId}/revert`);
+check('重复撤销 → 409 BAD_STATE', revAgain.status === 409 && revAgain.json.code === 'BAD_STATE', revAgain.text);
+
+const revPast = await doc1.post(`/api/doctor/appointments/${ownId}/revert`);
+check('时段已开始的已完成预约 → 409 ALREADY_STARTED（已发生的诊疗不能改回去）',
+  revPast.status === 409 && revPast.json.code === 'ALREADY_STARTED', revPast.text);
 
 /* =======================================================
    20. 价格单一来源：服务页展示与订单计价读同一份数据（第六期）

@@ -115,7 +115,8 @@ function listMyAppointments() {
     .then(unwrap('appointments'));
 }
 
-/* 取消预约：24 小时内服务端会拒绝（409 TOO_LATE_TO_CANCEL），前端不自己算 */
+/* 取消预约：时段已开始会被服务端拒绝（409 ALREADY_STARTED），前端不自己算；
+   若该预约已支付，服务端会在同一个事务里把订单一起退款，响应里带 refund。 */
 function cancelAppointment(id) {
   return request.post('/api/appointments/' + id + '/cancel', {}, { withAuth: true });
 }

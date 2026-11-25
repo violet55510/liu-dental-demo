@@ -18,7 +18,7 @@
 
   var ROLE_TEXT = { patient: '病人', doctor: '医生', admin: '管理员' };
   var ROLE_SUB = {
-    patient: '查看自己的预约与详情，可自助取消（开始前 24 小时外）。',
+    patient: '查看自己的预约与详情，时段开始前可自助取消；已支付的会一并退款。',
     doctor: '确认、完成、标记未到诊或恢复误标记录，只作用于与自己有预约关系的患者。',
     admin: '审核医生入驻申请、停用异常账号。'
   };
@@ -31,8 +31,6 @@
   };
 
   var ORDER_TEXT = { unpaid: '待支付', paid: '已支付', refunded: '已退款' };
-
-  var CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
   /* 医生端只看支付状态，不做任何金额计算：
      text 与 kind 都来自服务端返回的 order 摘要。 */
@@ -154,12 +152,13 @@
       if (opts.buildActions) opts.buildActions(actions, a, item);
       if (actions.childNodes.length) item.appendChild(actions);
 
-      /* 病人侧：不能自助取消时说明原因，而不是让按钮消失得没头没尾 */
+      /* 病人侧：不能自助取消时说明原因，而不是让按钮消失得没头没尾。
+         现在唯一的锁是「时段已开始」，所以这里的提示也只有这一种。 */
       if (opts.explainUncancellable && (a.status === 'pending' || a.status === 'confirmed')) {
         var left = hoursLeft(a);
-        if (!(left !== null && left >= 24)) {
+        if (!(left !== null && left > 0)) {
           item.appendChild(el('p', 'appt-lock',
-            left === null ? '不可取消' : '距开始不足 24 小时，请电话联系门诊'));
+            left === null ? '不可取消' : '该时段已开始，如需改期请联系门诊'));
         }
       }
 
@@ -185,7 +184,8 @@
       btn.hidden = true;          // 确认区展开时把原按钮收起来，避免两行按钮打架
       clear(box);
 
-      var ask = el('span', 'appt-confirm-text', '确认取消这次预约？');
+      var ask = el('span', 'appt-confirm-text',
+        opts.paid ? '确认取消？已支付的费用会一并退回（模拟）。' : '确认取消这次预约？');
       var yes = el('button', 'btn btn--danger btn--sm', '确认取消');
       var no = el('button', 'btn btn--ghost btn--sm', '再想想');
       yes.type = 'button';
@@ -222,37 +222,64 @@
   function cancelRuleText(rule) {
     if (!rule) return '—';
     if (rule.reason === 'OK') {
-      return '距开始约 ' + rule.hours_left + ' 小时，可自助取消（需在开始前 24 小时以上）';
+      var h = rule.hours_left;
+      var left = (typeof h === 'number' && h > 0)
+        ? '距开始约 ' + h + ' 小时'
+        : '距开始不足 1 小时';
+      return left + '，时段开始前都可以自助取消';
     }
-    if (rule.reason === 'TOO_LATE_TO_CANCEL') {
-      return '距开始不足 24 小时（约 ' + rule.hours_left + ' 小时），请电话联系门诊';
-    }
+    if (rule.reason === 'ALREADY_STARTED') return '该时段已开始，如需改期请联系门诊';
     if (rule.reason === 'ALREADY_CANCELLED') return '已取消，无需再次操作';
     return '该状态不可取消';
   }
 
-  /* ---------- 病人：去支付 / 已支付 ----------
-     只对「待确认 / 已确认」的预约显示入口。
-     已经有订单且不是 unpaid（已支付、已退款）时不再给按钮，
-     改成一行状态说明 —— 避免用户点进去发现什么也做不了。
+  /* ---------- 病人：支付 / 退款入口 ----------
+     这里修过一个「功能写了但点不到」的坑：
+     原来的规则是「订单不是 unpaid 就不再给按钮，只显示一行文字」，
+     于是已支付的预约在列表里只剩「已支付 ¥6,800」，永远进不了 payment.html，
+     而退款按钮恰好只在那一页 —— 等于退款功能对病人彻底不可达。
+
+     现在的分工：
+       没有订单        → 只有还能就诊的预约给「去支付」
+       待支付          → 还能就诊才给「继续支付」（已取消/未到诊不给，服务端也会拒）
+       已支付          → 给「查看 / 退款」入口，且不限预约状态
+                        （医生误标 completed 的那单，病人也得能把钱退回来）
+       已退款          → 只显示结果，没有可做的
 
      注意这里只是体验层：真正的金额与状态都在服务端，
      手工拼一个 payment.html?appointment=别人的id 也只会拿到 403。 */
   function buildPayAction(actions, a) {
-    if (a.status !== 'pending' && a.status !== 'confirmed') return;
+    var payable = a.status === 'pending' || a.status === 'confirmed';
 
-    if (a.order && a.order.status !== 'unpaid') {
-      actions.appendChild(el('span', 'appt-paid',
-        (ORDER_TEXT[a.order.status] || a.order.status) + ' ' + a.order.amount_text));
+    if (!a.order) {
+      if (!payable) return;
+      actions.appendChild(buildPayLink(a, '去支付'));
       return;
     }
 
+    if (a.order.status === 'refunded') {
+      actions.appendChild(el('span', 'appt-paid', '已退款 ' + a.order.amount_text));
+      return;
+    }
+
+    if (a.order.status === 'paid') {
+      actions.appendChild(el('span', 'appt-paid', '已支付 ' + a.order.amount_text));
+      actions.appendChild(buildPayLink(a, '查看 / 退款', 'btn btn--ghost btn--sm'));
+      return;
+    }
+
+    /* 剩下的就是 unpaid */
+    if (!payable) return;
+    actions.appendChild(buildPayLink(a, '继续支付'));
+  }
+
+  function buildPayLink(a, text, className) {
     var link = document.createElement('a');
-    link.className = 'btn btn--primary btn--sm';
+    link.className = className || 'btn btn--primary btn--sm';
     link.href = 'payment.html?appointment=' + encodeURIComponent(a.id);
     link.setAttribute('data-pay-id', String(a.id));
-    link.textContent = a.order ? '继续支付' : '去支付';
-    actions.appendChild(link);
+    link.textContent = text;
+    return link;
   }
 
   function buildDetailButton(id, statusEl) {
@@ -327,19 +354,27 @@
        confirmed → 完成 / 患者未到
        no_show   → 恢复为已确认（点错了能改回来；此时号源可能已被别人重约，
                    所以按钮只是入口，真正的冲突由服务端 409 SLOT_REBOOKED 拦）
-       completed / cancelled 是终态，不给按钮。
-     这属于体验层的「不给你点错的机会」，真正的拦截在服务端 409 BAD_STATE。 */
+       completed → 撤销完成（仅时段还没开始时给，见下）
+       cancelled 才是终态，不给按钮。
+     这属于体验层的「不给你点错的机会」，真正的拦截在服务端 409 BAD_STATE / TOO_EARLY。 */
   var DOCTOR_BUTTONS = {
     pending: [{ action: 'confirm', text: '确认预约', cls: 'btn--primary' }],
     confirmed: [
       { action: 'complete', text: '标记完成', cls: 'btn--primary' },
       { action: 'no-show', text: '患者未到', cls: 'btn--ghost' }
     ],
-    no_show: [{ action: 'reopen', text: '恢复为已确认', cls: 'btn--ghost' }]
+    no_show: [{ action: 'reopen', text: '恢复为已确认', cls: 'btn--ghost' }],
+    /* completed 不再是绝对终态：时段**还没开始**却被标成「已完成」，只能是误点。
+       这种情况下给一个撤销入口，否则这条预约同时锁死三件事——病人不能取消、
+       不能退款、单子也结不掉。时段已经开始的不给，那是真实发生的诊疗记录。 */
+    completed: [{ action: 'revert', text: '撤销完成', cls: 'btn--ghost', onlyBeforeStart: true }]
   };
 
   function buildDoctorActions(actions, a, opts) {
-    var list = DOCTOR_BUTTONS[a.status] || [];
+    var left = hoursLeft(a);
+    var list = (DOCTOR_BUTTONS[a.status] || []).filter(function (cfg) {
+      return !cfg.onlyBeforeStart || (left !== null && left > 0);
+    });
     list.forEach(function (cfg) {
       var btn = el('button', 'btn ' + cfg.cls + ' btn--sm', cfg.text);
       btn.type = 'button';
@@ -372,17 +407,18 @@
         explainUncancellable: true,
         emptyText: '还没有预约。点右上角「新建预约」选一个可约时段。',
         buildActions: function (actions, a) {
-          /* 详情任何状态都能看；支付只在「待确认 / 已确认 且未支付」时出现；
-             取消只在「待确认 / 已确认 且距开始 ≥24h」时出现 */
+          /* 详情任何状态都能看；支付 / 退款入口见 buildPayAction；
+             取消只由服务端给的 cancellable 决定（时段还没开始就能取消）——
+             前端不再自己算时间，避免两套规则各走各的。 */
           actions.appendChild(buildDetailButton(a.id, statusEl));
           buildPayAction(actions, a);
 
-          var left = hoursLeft(a);
-          var cancellable = (a.status === 'pending' || a.status === 'confirmed') &&
-                            left !== null && left >= 24;
-          if (cancellable) actions.appendChild(buildCancelButton(a.id, {
-            onCancel: function (id) { cancelAppointment(id, statusEl); }
-          }));
+          if (a.cancellable) {
+            actions.appendChild(buildCancelButton(a.id, {
+              paid: !!(a.order && a.order.status === 'paid'),
+              onCancel: function (id) { cancelAppointment(id, statusEl); }
+            }));
+          }
         }
       });
 
@@ -408,7 +444,10 @@
         await loadPatientAppointments(null);
         return;
       }
-      await loadPatientAppointments(statusEl, '已取消。该时段已重新放出。');
+      /* 后端在同一个事务里把订单也退了，这里如实告诉病人钱去哪了 */
+      await loadPatientAppointments(statusEl, data.refund
+        ? '已取消，' + data.refund.amount_text + ' 已退回（模拟，无真实资金往来）。'
+        : '已取消。该时段已重新放出。');
     } catch (e) {
       setStatus(statusEl, '无法连接后端', 'error');
       await loadPatientAppointments(null);

@@ -26,7 +26,14 @@ const { getService, formatCents } = require('../pricing');
 
 const router = express.Router();
 
-const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;   // 开始前 24 小时内不可自助取消
+/* 取消规则（第七期修订）：只要时段还没开始，病人都能自助取消。
+   ---------------------------------------------------------
+   原来是一条「开始前 24 小时内不可取消」的窗口。它假设用户提前几天预约，
+   但只要约的是「明天上午」，提交那一刻距开始就不到 24 小时 ——
+   等于从预约成功的那一秒起就取消不了，规则比它想防的东西更伤人。
+
+   现在只保留一条边界：**时段已开始**就不让自助取消（那时人应该在诊室里）。
+   临期取消浪费号源的问题交给门诊侧处理（电话改期），不再用它卡住所有预约。 */
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /* 状态的中文标签只在这里维护一份，错误信息、详情响应都引用它 */
@@ -258,24 +265,25 @@ function isCancellable(row) {
   if (row.status !== 'pending' && row.status !== 'confirmed') return false;
   const startMs = slotStartMs(row.date, row.start_time);
   if (startMs === null) return false;
-  return startMs - Date.now() >= CANCEL_WINDOW_MS;
+  /* 只要还没开始就能取消，不再要求提前 24 小时 */
+  return startMs > Date.now();
 }
 
 /* 取消规则的原因码：前端按 code 决定显示「可以取消」还是「请电话联系」，
-   不用自己去算 24 小时，也就不会出现前后端算不一致的情况。 */
+   不用自己去算时间，也就不会出现前后端算不一致的情况。 */
 function cancelRule(row) {
   const startMs = slotStartMs(row.date, row.start_time);
   const leftMs = startMs === null ? null : startMs - Date.now();
-  const hoursLeft = leftMs === null ? null : Math.max(0, Math.floor(leftMs / 3600000));
+  const minutesLeft = leftMs === null ? null : Math.max(0, Math.floor(leftMs / 60000));
 
   let code = 'OK';
   if (row.status === 'cancelled') code = 'ALREADY_CANCELLED';
   else if (row.status === 'completed' || row.status === 'no_show') code = 'NOT_CANCELLABLE';
-  else if (leftMs === null || leftMs < CANCEL_WINDOW_MS) code = 'TOO_LATE_TO_CANCEL';
+  else if (leftMs === null || leftMs <= 0) code = 'ALREADY_STARTED';
 
   return {
-    window_hours: CANCEL_WINDOW_MS / 3600000,
-    hours_left: hoursLeft,
+    minutes_left: minutesLeft,
+    hours_left: minutesLeft === null ? null : Math.floor(minutesLeft / 60),
     cancellable: code === 'OK',
     reason: code
   };
@@ -328,15 +336,40 @@ router.get('/patient/appointments/:id', authenticate, requireRole('patient'), (r
 });
 
 /* =======================================================
-   4. 取消预约（病人，且只能取消自己的）
+   4. 取消预约（病人，且只能取消自己的）+ 订单联动退款
    POST /api/appointments/:id/cancel
    -------------------------------------------------------
    顺序很重要：
      先按 id 查出来 → 不是自己的立刻 403（对象级权限）
-     → 再看状态与 24 小时规则 → 最后 UPDATE 时再带一次 patient_id
+     → 再看状态与「时段是否已开始」→ 最后 UPDATE 时再带一次 patient_id
    UPDATE 里重复带 patient_id 是「防御性冗余」：
    万一上面某天被改坏，SQL 这一层仍然写不动别人的行。
+
+   ★ 退款是取消的一部分，不是另一步 ★
+   只把预约改成 cancelled、订单留在 paid，就会留下「人不来了、钱还挂着」的
+   半截状态；病人还得自己再找退款按钮，入口一旦找不到这单就永远悬着。
+   所以两条 UPDATE 放进同一个事务：要么都成，要么都不成。
    ======================================================= */
+const cancelWithRefund = db.transaction((id, patientId) => {
+  const info = stmts.cancelAppointment.run(id, patientId);
+  if (info.changes === 0) return { changed: false, refund: null };
+
+  const order = stmts.orderByAppointment.get(id);
+
+  /* 四种组合：
+       没有订单      → 只取消
+       unpaid        → 只取消（没付过钱，没有可退的）
+       paid          → 取消 + 退款
+       refunded      → 只取消（已经退过，不重复退） */
+  if (!order || order.status !== 'paid') return { changed: true, refund: null };
+
+  const r = stmts.markOrderRefunded.run(order.id, patientId);
+  return {
+    changed: true,
+    refund: r.changes === 1 ? { id: order.id, amount_cents: order.amount_cents } : null
+  };
+});
+
 router.post('/appointments/:id/cancel', authenticate, requireRole('patient'), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -358,26 +391,35 @@ router.post('/appointments/:id/cancel', authenticate, requireRole('patient'), (r
     return fail(res, 409, 'NOT_CANCELLABLE', '已完成的预约不能取消');
   }
 
+  /* 唯一的边界：时段已经开始，人应该在诊室里，不再让自助取消 */
   const startMs = slotStartMs(appt.date, appt.start_time);
   const leftMs = startMs === null ? 0 : startMs - Date.now();
-  if (leftMs < CANCEL_WINDOW_MS) {
-    const hours = leftMs > 0 ? Math.floor(leftMs / 3600000) : 0;
-    return fail(
-      res, 409, 'TOO_LATE_TO_CANCEL',
-      leftMs > 0
-        ? `距开始不足 24 小时（约 ${hours} 小时），不能自助取消，请电话联系门诊`
-        : '该时段已开始，无法取消',
-      { hours_left: hours }
-    );
+  if (leftMs <= 0) {
+    return fail(res, 409, 'ALREADY_STARTED', '该时段已开始，不能自助取消；如需改期请联系门诊');
   }
 
-  const info = stmts.cancelAppointment.run(id, req.user.id);
-  if (info.changes === 0) {
+  const result = cancelWithRefund(id, req.user.id);
+  if (!result.changed) {
     /* 走到这里说明状态在两步之间被改了（比如医生刚把状态改成 completed） */
     return fail(res, 409, 'STATE_CHANGED', '预约状态已变化，请刷新后再试');
   }
 
-  res.json({ ok: true, id, status: 'cancelled' });
+  res.json({
+    ok: true,
+    id,
+    status: 'cancelled',
+    /* 退款是「顺带完成」的：前端据此提示「已取消并退款」，
+       而不是让病人自己去猜钱去哪了。 */
+    refund: result.refund
+      ? {
+          order_id: result.refund.id,
+          amount_cents: result.refund.amount_cents,
+          amount_text: formatCents(result.refund.amount_cents),
+          status: 'refunded',
+          simulated: true
+        }
+      : null
+  });
 });
 
 /* =======================================================
@@ -447,6 +489,18 @@ const DOCTOR_TRANSITIONS = {
     stmt: 'reopenAppointment',
     label: '恢复为已确认',
     need: '只有「未到诊」的预约可以恢复'
+  },
+  /* 纠错入口（第七期新增）：completed 也不再是绝对终态。
+     医生完全可能在时段还没到的时候手滑点了「标记完成」——本期就是为此加了时间闸门，
+     但闸门只能挡住以后的误操作，已经误标的那条必须有路退回来，
+     否则它同时锁死三件事：病人不能取消、不能退款、这单诊疗也永远结不了。
+     限定「时段还没开始」才能撤销：已经真实发生过的诊疗记录不该被改回去。 */
+  revert: {
+    from: 'completed',
+    to: 'confirmed',
+    stmt: 'revertCompleteAppointment',
+    label: '撤销完成',
+    need: '只有「已完成」的预约可以撤销完成'
   }
 };
 
@@ -474,6 +528,33 @@ function doctorTransition(action) {
         `当前状态是「${STATUS_LABEL[appt.status] || appt.status}」，不能${cfg.label}：${cfg.need}`,
         { status: appt.status, status_label: STATUS_LABEL[appt.status] || appt.status, expected: cfg.from }
       );
+    }
+
+    /* ★ 时间闸门（第七期新增）★
+       状态机只回答「这条记录现在是什么状态」，回答不了「现在该不该做这个动作」。
+       没有时间闸门时，医生可以在任何时刻把一条**明天上午**的预约标成「已完成」——
+       病人因此不能再取消、也退不了款，而诊疗其实一天都还没发生。
+
+         complete → 时段必须已经开始
+         revert   → 反过来，只有时段还没开始才能撤销（已发生的诊疗不许改回去） */
+    if (action === 'complete' || action === 'revert') {
+      const startMs = slotStartMs(appt.date, appt.start_time);
+      const startsAt = `${appt.date} ${appt.start_time}`;
+
+      if (startMs !== null && action === 'complete' && startMs > Date.now()) {
+        return fail(
+          res, 409, 'TOO_EARLY',
+          `预约时段还没开始（${startsAt}），不能标记完成`,
+          { status: appt.status, starts_at: startsAt }
+        );
+      }
+      if (startMs !== null && action === 'revert' && startMs <= Date.now()) {
+        return fail(
+          res, 409, 'ALREADY_STARTED',
+          `该时段已经开始（${startsAt}），诊疗记录不能撤销`,
+          { status: appt.status, starts_at: startsAt }
+        );
+      }
     }
 
     let info;
@@ -522,6 +603,8 @@ router.post('/doctor/appointments/:id/no-show',
   authenticate, requireRole('doctor'), doctorTransition('no-show'));
 router.post('/doctor/appointments/:id/reopen',
   authenticate, requireRole('doctor'), doctorTransition('reopen'));
+router.post('/doctor/appointments/:id/revert',
+  authenticate, requireRole('doctor'), doctorTransition('revert'));
 
 /* =======================================================
    6. 医生看自己的排班（含占用情况）

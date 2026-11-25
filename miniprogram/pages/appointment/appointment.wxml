@@ -139,7 +139,7 @@
         </view>
         <view class="tip-row">
           <text class="tip-index">2</text>
-          <text class="tip-text">开始前 24 小时内不能自助取消，需电话联系门诊改期。</text>
+          <text class="tip-text">时段开始前可以自助取消，已支付的会一并退款；时段开始后需电话联系门诊改期。</text>
         </view>
         <view class="tip-row">
           <text class="tip-index">3</text>

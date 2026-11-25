@@ -480,6 +480,14 @@ const stmts = {
     WHERE id = ? AND doctor_id = ? AND status = 'no_show'
   `),
 
+  /* 撤销「完成」：把误标的 completed 退回 confirmed。
+     和 reopen 一样是纠错入口，WHERE 里仍带 doctor_id 与原状态，
+     保证「只能动自己的」和「只能从 completed 退」。 */
+  revertCompleteAppointment: db.prepare(`
+    UPDATE appointments SET status = 'confirmed'
+    WHERE id = ? AND doctor_id = ? AND status = 'completed'
+  `),
+
   listByPatient: db.prepare(`
     SELECT a.id, a.service, a.status, a.note, a.created_at, a.cancelled_at,
            s.date, s.start_time, s.end_time,

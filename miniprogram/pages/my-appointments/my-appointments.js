@@ -34,7 +34,7 @@ function toView(a) {
     dept: a.doctor_dept || '',
     serviceLabel: a.service ? a.service.label : '未记录项目',
     canCancel: !!a.cancellable,
-    cancelHint: a.cancellable ? '' : '开始前 24 小时内需电话联系门诊取消或改期',
+    cancelHint: a.cancellable ? '' : '该时段已开始，需电话联系门诊取消或改期',
     orderLabel: a.order ? ('订单 ' + a.order.status_label) : ''
   };
 }
@@ -141,7 +141,7 @@ Page({
         that.setData({ cancellingId: 0 });
         request.toastError(err);
         console.log('[我的预约] 取消失败 #' + id + '：' + ((err && err.message) || '未知错误'));
-        /* 失败常见原因：刚被别人改成 completed / 距开始不足 24 小时。
+        /* 失败常见原因：刚被别人改成 completed / 时段已经开始。
            重新拉一次列表，按钮状态就跟着服务端更新了。 */
         if (err && err.statusCode === 409) return that.load();
         return null;
