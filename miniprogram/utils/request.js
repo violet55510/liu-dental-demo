@@ -103,9 +103,33 @@ function createError(code, message, extra) {
   return Object.assign({ code: code, message: message, statusCode: 0, body: null }, extra || {});
 }
 
+/* 云托管网关的报错是英文 + 错误码（INVALID_HOST、-501000 之类），
+   直接甩到页面上没人看得懂，也没法照着做。这里换成可行动的中文。
+   命中不了就返回空串，走原来的兜底文案。 */
+function cloudErrorText(code, raw) {
+  const text = String(raw || '') + ' ' + String(code || '');
+  if (/INVALID_HOST|-501000/i.test(text)) {
+    return '云托管环境不通（INVALID_HOST / -501000）：这个环境不是当前小程序绑定的微信云托管环境。'
+      + '请改用「公网域名 + request 合法域名」访问（DEPLOY.md §12.8），或把 config.js 的 CLOUD.enabled 改回 false。';
+  }
+  if (/ENDPOINT_VERSION_NOT_FOUND/i.test(text)) {
+    return '云托管服务还没有可用版本：代码没发布成功，去控制台看构建/发布记录。';
+  }
+  if (/SERVICE_CHARGE_OVERDUE|ENV_SUSPENDED|ENV_ISOLATED/i.test(text)) {
+    return '云托管环境已欠费或已停服，续费/恢复后重试。';
+  }
+  if (/REQUEST_SERVICE_FAILED/i.test(text)) {
+    return '请求转发到容器失败：服务状态不是「运行中」，或容器启动即崩溃，去看云托管日志。';
+  }
+  return '';
+}
+
 function normalizeError(statusCode, body) {
   const code = (body && (body.code || body.error_code)) || 'HTTP_' + statusCode;
   let message = (body && (body.error || body.message)) || '';
+
+  /* 网关返回 4xx + 英文错误体时，先换成中文；换不到再走状态码兜底 */
+  if (message) message = cloudErrorText(code, message) || message;
 
   if (!message) {
     if (statusCode === 401) message = '登录状态已失效，请重新登录';
@@ -200,6 +224,15 @@ function request(options) {
     }
 
     function onFail(err) {
+      /* 云通道失败时，SDK 的 errMsg 里带着真实的网关错误（-501000 等）。
+         先把它翻译成人话，再决定要不要提示「服务没部署」。 */
+      const raw = String((err && (err.errMsg || err.message)) || '');
+      const mapped = cloudErrorText('', raw);
+      if (CLOUD_ENABLED && mapped) {
+        reject(createError('CLOUD_GATEWAY', mapped, { body: err }));
+        return;
+      }
+
       /* 连不上后端时最常见的原因：
          HTTP 模式 —— 服务没启动 / 手机与电脑不同网段 / 没勾「不校验合法域名」；
          云托管模式 —— 服务没部署成功 / 服务名填错 / 环境 ID 填错。 */

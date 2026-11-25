@@ -617,7 +617,7 @@ ngrok http 3000
 ```js
 // miniprogram/config.js
 CLOUD: {
-  enabled: true,
+  enabled: false,
   env: 'prod-d1gxw1vfja675c5b9',  // 12.3 第 7 步 / 页面右上角「环境 prod」看到的环境 ID
   service: 'springboot-vaij-001'  // 服务列表里的服务名（模板自动生成的，不用改名）
 }
@@ -625,6 +625,9 @@ CLOUD: {
 
 `enabled: true` 之后，`BASE_URL` 自动失效，所有请求改走云托管。
 想切回本地开发，把它改回 `false` 即可，两套通道互不影响。
+
+> 本仓库当前是 `enabled: false`：作者那个环境调 `callContainer` 返回 `-501000 / Invalid host`，
+> 换成 12.8 的「公网域名」方式访问。环境只要能调通，把 `enabled` 改回 `true` 即可。
 
 ### 12.6 怎么验证真的成功了
 
@@ -647,7 +650,36 @@ CLOUD: {
 | `callContainer:fail env not exists` | 环境 ID 填错，或环境属于别的小程序 | 核对 `env`，确认同主体 |
 | 报「cloud init 未调用」 | `app.js` 的 `wx.cloud.init` 没执行 | 确认 `CLOUD.enabled/ env` 都已填 |
 | 报「基础库不支持云托管调用」 | 基础库低于 2.23.0 | 升级微信，或后台把最低基础库调高 |
+| `-501000` / `Invalid host` / `INVALID_HOST` | 这个环境没有被当前小程序认领：`callContainer` 只能访问「与这个小程序绑定」的微信云托管环境。腾讯云控制台（CloudBase）里建的环境、或换过主体的环境都会这样 | 走 12.8 的公网域名方式；不要把 `env` 当成万能钥匙 |
 | 每次部署后账号/预约都没了 | 容器文件系统不持久（预期行为） | 用种子账号重新演示 |
+
+### 12.8 备选路线：用「公网域名 + request 合法域名」访问（不依赖 callContainer）
+
+`callContainer` 报 `-501000 / Invalid host` 时走这条。它本质上就是「让后端有一个固定的公网 HTTPS 地址」，
+跟本地那套代码完全一样，只是地址换了——反而比 callContainer 好排查。
+
+1. **拿到公网域名**：云托管控制台 → 该服务 → 「服务设置 → 网络访问」，确认「公网访问」是开的，
+   复制默认域名（形如 `https://xxxx.ap-shanghai.run.tcloudbase.com` 或 `...app.tcloudbase.com`）。
+   服务列表页右上角的「公网域名访问」按钮给的就是这个地址。
+2. **在浏览器里验一遍**：打开 `<域名>/api/health`。
+   - 看到 `{"ok":true,"db":"app.db","users":5}` → 云端跑的就是本仓库代码，继续第 3 步；
+   - 看到 Spring Boot 的白色报错页、或 404 → 服务里还是模板代码，先回 12.4 重新发布；
+   - 一直转圈/超时 → 最小实例数为 0，冷启动 10–30 秒，等一会儿再刷。
+3. **配合法域名**：小程序后台 <https://mp.weixin.qq.com> → 开发 → 开发管理 → 开发设置 →
+   服务器域名 → **request 合法域名**，填 `https://` + 域名（**不带路径、不带端口**），保存。
+   每月有 50 次修改额度，别反复试。
+4. **改代码**：`miniprogram/config.js` 里
+   ```js
+   CLOUD: { enabled: false, ... }                       // 关掉云通道，避免它抢在前面
+   BASE_URL: 'https://xxxx.ap-shanghai.run.tcloudbase.com'  // HTTPS 默认 443，不写端口
+   ```
+5. **验证**：开发者工具清缓存重编译 → 能登录、能拉列表；再「上传」→ 后台设为**体验版** →
+   手机**关掉 Wi-Fi 用流量**、**不开「开发调试」**，能登录能预约就算成了。
+
+两点注意：
+- 云托管的**默认域名有有效期**（控制台会标注，常见 30 天），过期前续期，或绑一个自己备案的域名；
+  默认域名本身是腾讯备案的，你不需要自己备案。
+- 公网域名访问不带用户身份，`/api/*` 的鉴权仍然靠我们自己签发的 JWT，逻辑不变。
 
 ---
 

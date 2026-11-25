@@ -63,12 +63,13 @@ module.exports = {
      校园网常开终端隔离，同一 Wi-Fi 的手机也可能访问不到 —— 连不上先用模拟器或内网穿透。 */
   BASE_URL: 'http://100.65.136.17:3000',
 
-  /* ★ 云托管通道 ★
-     开通云托管后把 enabled 改成 true，并填上控制台里的「环境 ID」和「服务名称」，
-     小程序就不再请求上面的 BASE_URL，而是直连云端。
-     想退回本地开发：把 enabled 改回 false（或直接删掉 env / service 任一值）。 */
+  /* ★ 云托管通道（callContainer）★
+     当前为 false：这个环境实测不通。callContainer 返回 -501000 / Invalid host，
+     说明该环境没有被当前小程序认领（环境不是「微信云托管」里与这个 AppID 绑定的那一个）。
+     先保持 false，回到上面的 BASE_URL（本地 / 校园网）——页面能正常用。
+     云端照旧可用，用「公网域名 + request 合法域名」那条路，见 DEPLOY.md §12.8。 */
   CLOUD: {
-    enabled: true,
+    enabled: false,
     env: 'prod-d1gxw1vfja675c5b9',    // 云托管控制台右上角「环境 prod（上海）」里的环境 ID
     service: 'springboot-vaij-001'    // 服务列表里的服务名（名字是建模板时自动生成的，不影响使用）
   }
