@@ -658,27 +658,35 @@ CLOUD: {
 `callContainer` 报 `-501000 / Invalid host` 时走这条。它本质上就是「让后端有一个固定的公网 HTTPS 地址」，
 跟本地那套代码完全一样，只是地址换了——反而比 callContainer 好排查。
 
+> **本仓库已按这条跑通**：后端公网域名是
+> `https://springboot-vaij-353722-13-1540473897.sh.run.tcloudbase.com`，
+> `miniprogram/config.js` 的 `BASE_URL` 已指向它，`CLOUD.enabled` 保持 `false`。
+> 实测 `/api/health` 返回 `{"ok":true,"db":"app.db","users":5}`，`/api/public/*` 三个接口与
+> `POST /api/login` + `GET /api/me`（Bearer）都正常，所以下面 1~2 步可以直接跳过，只剩第 3 步的白名单。
+
 1. **拿到公网域名**：云托管控制台 → 该服务 → 「服务设置 → 网络访问」，确认「公网访问」是开的，
-   复制默认域名（形如 `https://xxxx.ap-shanghai.run.tcloudbase.com` 或 `...app.tcloudbase.com`）。
+   复制默认域名（形如 `https://<服务名>-<一串数字>.sh.run.tcloudbase.com`，`.sh` 是地域）。
    服务列表页右上角的「公网域名访问」按钮给的就是这个地址。
 2. **在浏览器里验一遍**：打开 `<域名>/api/health`。
    - 看到 `{"ok":true,"db":"app.db","users":5}` → 云端跑的就是本仓库代码，继续第 3 步；
    - 看到 Spring Boot 的白色报错页、或 404 → 服务里还是模板代码，先回 12.4 重新发布；
    - 一直转圈/超时 → 最小实例数为 0，冷启动 10–30 秒，等一会儿再刷。
 3. **配合法域名**：小程序后台 <https://mp.weixin.qq.com> → 开发 → 开发管理 → 开发设置 →
-   服务器域名 → **request 合法域名**，填 `https://` + 域名（**不带路径、不带端口**），保存。
-   每月有 50 次修改额度，别反复试。
+   服务器域名 → **request 合法域名**，填 `https://springboot-vaij-353722-13-1540473897.sh.run.tcloudbase.com`
+   （**不带路径、不带端口**），保存。每月有 50 次修改额度，别反复试。
 4. **改代码**：`miniprogram/config.js` 里
    ```js
-   CLOUD: { enabled: false, ... }                       // 关掉云通道，避免它抢在前面
-   BASE_URL: 'https://xxxx.ap-shanghai.run.tcloudbase.com'  // HTTPS 默认 443，不写端口
+   CLOUD: { enabled: false, ... }   // 关掉云通道，避免它抢在前面
+   BASE_URL: 'https://springboot-vaij-353722-13-1540473897.sh.run.tcloudbase.com'  // HTTPS 默认 443，不写端口
    ```
 5. **验证**：开发者工具清缓存重编译 → 能登录、能拉列表；再「上传」→ 后台设为**体验版** →
    手机**关掉 Wi-Fi 用流量**、**不开「开发调试」**，能登录能预约就算成了。
 
-两点注意：
-- 云托管的**默认域名有有效期**（控制台会标注，常见 30 天），过期前续期，或绑一个自己备案的域名；
-  默认域名本身是腾讯备案的，你不需要自己备案。
+三点注意：
+- 这是 CloudBase 的**测试域名**：用浏览器直接打开 `/`（HTML 页面）时可能先出现一页
+  「风险提醒 / 仅供开发测试」，点继续即可；`/api/*` 返回的是 JSON，实测不会插这层提示，小程序不受影响。
+- **默认域名有有效期**（控制台会标注，常见 30 天），过期前续期，或绑一个自己备案的域名；
+  默认域名本身是腾讯备案的，你不需要自己备案。**体验版演示请赶在有效期内。**
 - 公网域名访问不带用户身份，`/api/*` 的鉴权仍然靠我们自己签发的 JWT，逻辑不变。
 
 ---

@@ -187,9 +187,10 @@ const cfg = read('config.js');
 const cfgCode = cfg.replace(/\/\*[\s\S]*?\*\//g, '');
 const baseHits = cfgCode.match(/BASE_URL:\s*'[^']+'/g) || [];
 const baseValue = baseHits.length ? baseHits[0].replace(/^BASE_URL:\s*'|'$/g, '') : '';
-check('地址只在 config.js 声明一次且是带端口的完整 URL；request.js 从它读取、不硬编码域名',
+/* 端口是可选的：本地 HTTP 要写 :3000，云端 HTTPS 走默认 443 不写端口 */
+check('地址只在 config.js 声明一次且是完整 URL（协议 + 主机，可带端口）；request.js 从它读取、不硬编码域名',
   baseHits.length === 1 &&
-  /^https?:\/\/[^\s'"]+:\d+$/.test(baseValue) &&
+  /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(baseValue) &&
   /require\('\.\.\/config'\)/.test(req) &&
   !/const BASE_URL = 'https?:/.test(req),
   baseValue || '未找到');

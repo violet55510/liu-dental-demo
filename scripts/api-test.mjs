@@ -776,13 +776,18 @@ check('预约「昨天」的时段 → 400 SLOT_IN_PAST',
 check('过去时段没有生成任何预约记录',
   db.prepare('SELECT COUNT(*) AS n FROM appointments WHERE schedule_id = ?').get(pastSlot).n === 0, '');
 
+/* 「已经开始的时刻」这一条必须按 pastHour 自己的日期落库。
+   早期版本用 ymd(0)（今天）配 pastHour 的钟点，在 00:00–00:59 跑测试时
+   会拼成「今天 23:00」这种未来时刻，断言随运行时间而红——不是服务端的问题。 */
 const pastHour = new Date();
 pastHour.setHours(pastHour.getHours() - 1, 0, 0, 0);
 const phStr = pad2(pastHour.getHours()) + ':00';
 const peStr = pad2(pastHour.getHours() + 1) + ':00';
-const todayPastSlot = addSlot3(implant.id, ymd(0), phStr, peStr);
+const pastYmd = pastHour.getFullYear() + '-' + pad2(pastHour.getMonth() + 1) + '-' + pad2(pastHour.getDate());
+const todayPastSlot = addSlot3(implant.id, pastYmd, phStr, peStr);
 const todayPastBook = await p1.post('/api/appointments', { schedule_id: todayPastSlot });
-check(`预约「今天 ${phStr}」这个已开始的时刻 → 400 SLOT_IN_PAST`,
+const whichDay = pastYmd === ymd(0) ? '今天' : '刚刚（已跨到前一天）';
+check(`预约「${whichDay} ${phStr}」这个已开始的时刻 → 400 SLOT_IN_PAST`,
   todayPastBook.status === 400 && todayPastBook.json.code === 'SLOT_IN_PAST', todayPastBook.text);
 
 /* 15.2 取消幂等：连续的第二次、第三次 */
