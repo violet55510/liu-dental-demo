@@ -30,6 +30,27 @@ if (!config || typeof config.BASE_URL !== 'string' || !config.BASE_URL) {
 
 const BASE_URL = config.BASE_URL;
 
+/* ★ 双通道：HTTP（本地/局域网/穿透） 或 云托管 ★
+   config.CLOUD.enabled = true 且 env / service 都填了，才切到云托管；
+   任一缺失就保持原来的 wx.request 行为 —— 配错不会把本地开发弄挂。 */
+const CLOUD = config.CLOUD || {};
+const CLOUD_ENABLED = !!(CLOUD.enabled && CLOUD.env && CLOUD.service);
+
+/* 报错文案里显示「连的是哪儿」，两种通道说法不同 */
+function backendLabel() {
+  return CLOUD_ENABLED ? ('微信云托管「' + CLOUD.service + '」') : BASE_URL;
+}
+
+/* callContainer 在部分基础库里把响应体给成字符串，统一解一次 */
+function parseBody(data) {
+  if (typeof data !== 'string') return data;
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return data;
+  }
+}
+
 const DEFAULT_TIMEOUT = 8000;
 
 /* storage 的键名就叫 token（和后端约定的一致），不叫 access_token、
@@ -152,41 +173,74 @@ function request(options) {
   assertLocalPath(url);
 
   return new Promise(function (resolve, reject) {
+    const method = opts.method || 'GET';
+    const timeout = opts.timeout || DEFAULT_TIMEOUT;
+    const header = buildHeader(!!opts.withAuth);
+
+    function onSuccess(res) {
+      const status = res.statusCode;
+      const body = parseBody(res.data);
+
+      if (status >= 200 && status < 300) {
+        resolve(body);
+        return;
+      }
+
+      const err = normalizeError(status, body);
+
+      /* 只有「需要登录的请求」拿到 401 才跳登录。
+         登录接口自己的 401 是「账号或密码不正确」，
+         那种情况必须留在页面上给用户改密码（api.login 会显式关掉跳转）。 */
+      if (status === 401 && opts.withAuth && !opts.skipAuthRedirect) {
+        err.needLogin = true;
+        err.redirected = handleUnauthorized();
+      }
+
+      reject(err);
+    }
+
+    function onFail(err) {
+      /* 连不上后端时最常见的原因：
+         HTTP 模式 —— 服务没启动 / 手机与电脑不同网段 / 没勾「不校验合法域名」；
+         云托管模式 —— 服务没部署成功 / 服务名填错 / 环境 ID 填错。 */
+      const hint = CLOUD_ENABLED
+        ? '请确认云托管服务已部署且状态为「运行中」，并核对 config.js 里的 env 与 service。'
+        : '请确认 npm start 已运行，并已勾选「不校验合法域名」。';
+      reject(createError('NETWORK', '连接不上后端（' + backendLabel() + '）。' + hint, { body: err }));
+    }
+
+    if (CLOUD_ENABLED) {
+      if (typeof wx.cloud === 'undefined' || typeof wx.cloud.callContainer !== 'function') {
+        reject(createError(
+          'NO_CLOUD',
+          '当前微信版本不支持云托管调用（需要基础库 2.23.0 及以上），请升级微信或改用 HTTP 通道。'
+        ));
+        return;
+      }
+
+      /* 云托管调用：path 只写路径，不用拼域名；X-WX-SERVICE 指定服务名。
+         这条路不受「request 合法域名」限制，也不需要开「开发调试」。 */
+      wx.cloud.callContainer({
+        config: { env: CLOUD.env },
+        path: url,
+        method: method,
+        data: opts.data || undefined,
+        header: Object.assign({}, header, { 'X-WX-SERVICE': CLOUD.service }),
+        timeout: timeout,
+        success: onSuccess,
+        fail: onFail
+      });
+      return;
+    }
+
     wx.request({
       url: BASE_URL + url,
-      method: opts.method || 'GET',
+      method: method,
       data: opts.data || undefined,
-      header: buildHeader(!!opts.withAuth),
-      timeout: opts.timeout || DEFAULT_TIMEOUT,
-      success: function (res) {
-        const status = res.statusCode;
-
-        if (status >= 200 && status < 300) {
-          resolve(res.data);
-          return;
-        }
-
-        const err = normalizeError(status, res.data);
-
-        /* 只有「需要登录的请求」拿到 401 才跳登录。
-           登录接口自己的 401 是「账号或密码不正确」，
-           那种情况必须留在页面上给用户改密码（api.login 会显式关掉跳转）。 */
-        if (status === 401 && opts.withAuth && !opts.skipAuthRedirect) {
-          err.needLogin = true;
-          err.redirected = handleUnauthorized();
-        }
-
-        reject(err);
-      },
-      fail: function (err) {
-        /* 连不上后端时最常见的原因：服务没启动 / 手机与电脑不同网段 /
-           开发者工具没勾「不校验合法域名」。文案要能指向排查方向。 */
-        reject(createError(
-          'NETWORK',
-          '连接不上后端（' + BASE_URL + '）。请确认 npm start 已运行，并已勾选「不校验合法域名」。',
-          { body: err }
-        ));
-      }
+      header: header,
+      timeout: timeout,
+      success: onSuccess,
+      fail: onFail
     });
   });
 }
@@ -210,6 +264,8 @@ function toastError(err) {
 
 module.exports = {
   BASE_URL: BASE_URL,
+  CLOUD_ENABLED: CLOUD_ENABLED,
+  backendLabel: backendLabel,
   TOKEN_KEY: TOKEN_KEY,
   LOGIN_PAGE: LOGIN_PAGE,
   request: request,

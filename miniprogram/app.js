@@ -8,6 +8,8 @@
      原因还是那个：一进来就并发 3 个请求，用户还在看启动图，
      而且 token 过期时会在启动瞬间被踢去登录页，体验很糟。
    ========================================================= */
+const config = require('./config');
+
 App({
   globalData: {
     /* 首页拉到诊所信息后写一份，预约页直接读，
@@ -20,7 +22,24 @@ App({
     user: null
   },
 
-  onLaunch() {},
+  /* 云托管模式下必须先在入口初始化云能力，
+     否则 utils/request.js 里的 wx.cloud.callContainer 会报「cloud init 未调用」。
+     本地 HTTP 模式（CLOUD.enabled = false）完全跳过，行为与以前一致。 */
+  onLaunch() {
+    const cloud = config.CLOUD || {};
+    if (!cloud.enabled || !cloud.env) return;
+
+    if (typeof wx.cloud === 'undefined') {
+      console.error('[config] 已开启云托管通道，但当前基础库不支持 wx.cloud，请升级微信/基础库');
+      return;
+    }
+
+    wx.cloud.init({
+      env: cloud.env,
+      /* 不采集用户访问痕迹，演示项目不需要 */
+      traceUser: false
+    });
+  },
 
   /* 跨页共享的诊所信息缓存，带 5 分钟过期 */
   setClinic(clinic) {

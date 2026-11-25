@@ -213,6 +213,14 @@ check('统一错误处理：normalizeError + toastError 都已导出',
   /function normalizeError/.test(req) && /toastError: toastError/.test(req), '');
 check('拒绝完整域名请求（只接受 / 开头的站内路径）',
   /function assertLocalPath/.test(req) && /charAt\(0\) !== '\/'/.test(req), '');
+check('云托管通道存在，但默认关闭（enabled: false 时仍走 wx.request）',
+  /CLOUD:\s*\{[\s\S]{0,120}enabled:\s*false/.test(cfgCode) &&
+  /wx\.cloud\.callContainer/.test(req) &&
+  /CLOUD_ENABLED/.test(req), '');
+check('云通道只在 env 与 service 都填了才生效（配错不弄挂本地开发）',
+  /CLOUD\.enabled && CLOUD\.env && CLOUD\.service/.test(req), '');
+check('云托管初始化在 app.js 的 onLaunch，且未开启时直接返回',
+  /wx\.cloud\.init/.test(read('app.js')) && /if \(!cloud\.enabled \|\| !cloud\.env\) return;/.test(read('app.js')), '');
 
 /* ---------- 5. 认证与预约页结构 ---------- */
 group('5. 登录 / 注册 / 预约 / 我的预约');
