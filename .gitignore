@@ -17,6 +17,10 @@ data/
 # 微信开发者工具生成的本地私有配置（libVersion / 本机编译选项，因人而异）
 miniprogram/project.private.config.json
 
+# 合库开关：只在「发布目录」里放，仓库里绝不能有
+# （一旦出现在仓库根，本地 npm start 与六套回归都会打到真实云端库）
+server/api-proxy.json
+
 # —— 说明（不是忽略规则）——
 # data/ 必须排除：里面是本地演示库与 data/.session-secret，
 # 推到 GitHub 等于把会话密钥公开。云端（Render）首次启动会自己建库、写种子。

@@ -21,6 +21,7 @@ const protectedRoutes = require('./routes/protected');
 const appointmentRoutes = require('./routes/appointments');
 const orderRoutes = require('./routes/orders');
 const publicRoutes = require('./routes/public');
+const { readProxyTarget, createProxy } = require('./api-proxy');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
@@ -172,6 +173,17 @@ app.use((req, res, next) => {
 });
 
 /* ---------- 4. 接口 ---------- */
+
+/* 合库开关（默认关闭）：服务端目录里存在 api-proxy.json 时，
+   所有 /api 请求转给权威后端，本机这份 SQLite 不参与业务。
+   这样「前台域名」可以和「数据所在域名」分开，避免同一套系统
+   出现两份互不相干的账号与预约。详见 server/api-proxy.js。 */
+const API_PROXY = readProxyTarget();
+if (API_PROXY) {
+  app.use('/api', createProxy(API_PROXY.target));
+  console.log('[api-proxy] 已启用：/api → ' + API_PROXY.target + (API_PROXY.note ? '（' + API_PROXY.note + '）' : ''));
+}
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, db: path.basename(DB_FILE), users: countUsers() });
 });
