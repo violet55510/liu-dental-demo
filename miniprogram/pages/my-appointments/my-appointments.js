@@ -206,7 +206,7 @@ Page({
               console.log('[我的预约] 用户放弃支付订单 #' + order.id);
               return;
             }
-            that.doPay(order.id);
+            that.doPay(order.id, item.id);
           }
         });
       })
@@ -221,9 +221,11 @@ Page({
       });
   },
 
-  doPay: function (orderId) {
+  /* payingId 存的是「预约 id」而不是订单 id：
+     按钮的 disabled 判断用的是 item.id（预约），两边必须同一个口径。 */
+  doPay: function (orderId, apptId) {
     const that = this;
-    this.setData({ payingId: orderId });
+    this.setData({ payingId: apptId || orderId });
 
     return api.payOrder(orderId)
       .then(function (body) {
