@@ -210,9 +210,10 @@ const wx = {
     if (o.complete) o.complete({});   // request.js 靠 complete 复位「正在跳转」标志
   },
 
-  /* 二次确认：默认点「确定」，测试可以把 confirmModal 设成 false 验证拦截 */
+  /* 二次确认：默认点「确定」，测试可以把 confirmModal 设成 false 验证拦截。
+     content 也记下来：支付弹窗必须写清「不会产生真实扣款」，那是断言点。 */
   showModal: (o) => {
-    calls.push(['showModal', o.title, confirmModal ? 'confirm' : 'cancel']);
+    calls.push(['showModal', o.title, confirmModal ? 'confirm' : 'cancel', o.content || '']);
     if (o.success) o.success({ confirm: confirmModal, cancel: !confirmModal });
     if (o.complete) o.complete({});
   },
@@ -421,8 +422,79 @@ check('提交请求带的是 Bearer（不是空头）',
   calls.filter((c) => c[0] === 'request' && c[2] === '/api/appointments').every((c) => c[3] === 'Bearer'),
   JSON.stringify(calls.filter((c) => c[0] === 'request' && c[2] === '/api/appointments')));
 
-/* ---------- 7. 我的预约 + 取消 ---------- */
-group('4. 我的预约与取消（二次确认）');
+/* ---------- 7. 模拟支付与退款 ---------- */
+group('4. 模拟支付与退款（金额只由服务端算）');
+
+/* 支付 / 退款会把订单状态改掉，不能和后面的「取消」用例共用一条预约，
+   所以再提交一条（换到第 5 天），专门用来测支付链路。 */
+const payBook = await runPage('pages/appointment/appointment', {});
+const payDate = payBook.data.dates[4].value;
+await payBook.onDateChange({ detail: { value: payDate } });
+await waitIdle();
+
+const payFreeIdx = payBook.data.slots.findIndex((s) => !s.disabled);
+payBook.selectSlot({ currentTarget: { dataset: { index: payFreeIdx, id: payBook.data.slots[payFreeIdx].id } } });
+payBook.onServiceChange({ detail: { value: payBook.data.services.findIndex((s) => s.id === 'cleaning') } });
+await payBook.submit();
+await waitIdle();
+const payApptId = payBook.data.success && payBook.data.success.id;
+
+const payMy = await runPage('pages/my-appointments/my-appointments', {});
+const payIdx = payMy.data.appointments.findIndex((a) => a.id === payApptId);
+const payItem = payMy.data.appointments[payIdx];
+check('未支付的预约给「去支付」，金额取自服务端（洗牙 ¥280.00，前端不拼价）',
+  !!payItem && payItem.canPay === true && payItem.canRefund === false &&
+  /^¥280\.00$/.test(payItem.amountText),
+  JSON.stringify(payItem));
+
+/* 先点「再想想」：订单可以建（幂等），但不能发支付请求 */
+confirmModal = false;
+payMy.pay({ currentTarget: { dataset: { index: payIdx } } });
+await waitIdle();
+check('支付二次确认点「再想想」→ 只建单、不调支付接口（不扣款）',
+  calls.some((c) => c[0] === 'request' && c[2] === '/api/patient/appointments/' + payApptId + '/order') &&
+  !calls.some((c) => c[0] === 'request' && /\/api\/patient\/orders\/\d+\/pay$/.test(c[2])),
+  JSON.stringify(calls.filter((c) => c[0] === 'request' && String(c[2]).indexOf('/api/patient/') === 0)));
+
+const payModal = calls.filter((c) => c[0] === 'showModal' && c[1] === '模拟支付').pop();
+check('支付弹窗写清金额与「不会产生任何真实扣款」',
+  !!payModal && /不会产生任何真实扣款/.test(payModal[3] || ''),
+  payModal ? payModal[3] : '未弹出');
+
+/* 再点「确认支付」 */
+confirmModal = true;
+payMy.pay({ currentTarget: { dataset: { index: payIdx } } });
+await waitIdle();
+check('确认支付 → 调 POST /api/patient/orders/:id/pay 并刷新列表',
+  calls.some((c) => c[0] === 'request' && c[1] === 'POST' && /\/api\/patient\/orders\/\d+\/pay$/.test(c[2])),
+  '');
+
+const paidItem = payMy.data.appointments.find((a) => a.id === payApptId);
+check('支付后变「已支付」：去支付消失、退款出现（不会重复支付）',
+  !!paidItem && paidItem.canPay === false && paidItem.canRefund === true &&
+  paidItem.orderLabel === '订单 已支付',
+  JSON.stringify(paidItem));
+
+/* 退款：先「再想想」，再确认。refunded 是终态，退完就没有退款入口了 */
+confirmModal = false;
+const refundIdx = payMy.data.appointments.findIndex((a) => a.id === payApptId);
+payMy.refund({ currentTarget: { dataset: { index: refundIdx } } });
+await waitIdle();
+check('退款二次确认点「再想想」→ 不发退款请求',
+  !calls.some((c) => c[0] === 'request' && /\/refund$/.test(c[2])),
+  '');
+
+confirmModal = true;
+payMy.refund({ currentTarget: { dataset: { index: refundIdx } } });
+await waitIdle();
+const refundedItem = payMy.data.appointments.find((a) => a.id === payApptId);
+check('确认退款 → POST /refund，订单变「已退款」且不再有退款入口',
+  calls.some((c) => c[0] === 'request' && c[1] === 'POST' && /\/refund$/.test(c[2])) &&
+  !!refundedItem && refundedItem.canRefund === false && refundedItem.orderLabel === '订单 已退款',
+  JSON.stringify(refundedItem));
+
+/* ---------- 8. 我的预约 + 取消 ---------- */
+group('5. 我的预约与取消（二次确认）');
 
 const myPage = await runPage('pages/my-appointments/my-appointments', {});
 check('我的预约拉到列表，含刚提交的那条，状态是「待确认」',
@@ -459,7 +531,7 @@ check('取消后列表里该条变成「已取消」，且不再显示取消按�
   JSON.stringify(afterCancel));
 
 /* ---------- 8. token 过期 → 401 → 清 token → 跳登录 ---------- */
-group('5. token 过期：401 统一处理');
+group('6. token 过期：401 统一处理');
 
 const expiredToken = requireCjs('jsonwebtoken')
   .sign({ id: patientId, role: 'patient' }, DERIVED, { algorithm: 'HS256', expiresIn: -60 });
@@ -509,7 +581,7 @@ check('重新登录后 token 又能用（过期只是过期，不是封号）',
   (storage.get('token') || '').split('.').length === 3, 'len=' + (storage.get('token') || '').length);
 
 /* ---------- 9. 展示页仍然正常（阶段一没被改坏） ---------- */
-group('6. 展示页未受影响');
+group('7. 展示页未受影响');
 
 const home = await runPage('pages/index/index', {});
 check('首页 onLoad 完成且没有报错', home.data.loading === false && home.data.error === '',
@@ -553,7 +625,7 @@ check('退出登录 → 清 token、回到未登录态',
   !storage.get('token') && mine.data.user === null,
   'token=' + (storage.get('token') || '(空)'));
 
-group('7. 全程');
+group('8. 全程');
 check('页面 console 里没有 error（垫片统计）', consoleErrorCount === 0, 'count=' + consoleErrorCount);
 
 const reqs = calls.filter((c) => c[0] === 'request');

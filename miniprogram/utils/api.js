@@ -121,6 +121,35 @@ function cancelAppointment(id) {
   return request.post('/api/appointments/' + id + '/cancel', {}, { withAuth: true });
 }
 
+/* ---------- 模拟支付（需要登录） ----------
+   ⚠️ 与 Web 端同一条红线：不接任何真实支付通道，不发外部请求，
+      不读也不存卡号 / 二维码 / 商户号。这里的「支付」在服务端只做一件事：
+      把订单状态从 unpaid 改成 paid，再记一个时间戳。
+
+   金额不由前端传：服务端按预约记录的服务项目去价格表取。
+   前端就算传 amount 也会被忽略（接口回归第 19 组有专门断言盯着）。 */
+
+/* 确保这条预约有订单（幂等）：已有就返回原单，没有才新建。
+   所以支付页刷新、用户连点、网络重试都不会造出第二张单。
+   返回 order 对象（含 amount_text / status / simulated）。 */
+function ensureOrder(apptId) {
+  return request.post(
+    '/api/patient/appointments/' + apptId + '/order',
+    {},
+    { withAuth: true }
+  ).then(unwrap('order'));
+}
+
+/* 支付：只有 unpaid 能付。已支付再付是 409 ALREADY_PAID（不重复扣、不刷新 paid_at）。 */
+function payOrder(orderId) {
+  return request.post('/api/patient/orders/' + orderId + '/pay', {}, { withAuth: true });
+}
+
+/* 退款：只有 paid 能退。refunded 是终态，再退是 409 ALREADY_REFUNDED。 */
+function refundOrder(orderId) {
+  return request.post('/api/patient/orders/' + orderId + '/refund', {}, { withAuth: true });
+}
+
 module.exports = {
   getClinic: getClinic,
   getDoctors: getDoctors,
@@ -132,5 +161,8 @@ module.exports = {
   getSchedules: getSchedules,
   createAppointment: createAppointment,
   listMyAppointments: listMyAppointments,
-  cancelAppointment: cancelAppointment
+  cancelAppointment: cancelAppointment,
+  ensureOrder: ensureOrder,
+  payOrder: payOrder,
+  refundOrder: refundOrder
 };

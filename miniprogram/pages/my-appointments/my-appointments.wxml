@@ -41,14 +41,37 @@
             <text class="appt-label">预约号</text>
             <text class="appt-value">#{{item.id}}</text>
           </view>
-          <view wx:if="{{item.orderLabel}}" class="appt-row">
+          <view class="appt-row">
             <text class="appt-label">订单</text>
             <text class="appt-value">{{item.orderLabel}}</text>
           </view>
+          <view wx:if="{{item.amountText}}" class="appt-row">
+            <text class="appt-label">金额</text>
+            <text class="appt-value">{{item.amountText}}</text>
+          </view>
         </view>
 
-        <view class="appt-foot">
+        <view wx:if="{{item.cancelHint}}" class="appt-foot">
           <text class="appt-hint">{{item.cancelHint}}</text>
+        </view>
+
+        <view class="appt-actions">
+          <button
+            wx:if="{{item.canPay}}"
+            class="btn btn--primary appt-btn"
+            disabled="{{payingId === item.id}}"
+            data-index="{{index}}"
+            bindtap="pay">
+            {{payingId === item.id ? '支付中…' : '去支付'}}
+          </button>
+          <button
+            wx:if="{{item.canRefund}}"
+            class="btn btn--ghost appt-btn"
+            disabled="{{refundingId === item.id}}"
+            data-index="{{index}}"
+            bindtap="refund">
+            {{refundingId === item.id ? '退款中…' : '申请退款'}}
+          </button>
           <button
             wx:if="{{item.canCancel}}"
             class="btn btn--ghost appt-btn"
@@ -67,7 +90,8 @@
   </block>
 
   <view class="demo-note">
-    演示站点：这里是本机数据库里的真实预约记录，但不会真的通知门诊。
+    演示站点：这里的预约与订单记在云端数据库里，但不会真的通知门诊。
     时段开始前可以自助取消，已支付的会一并退款；开始后需电话联系。已完成的预约没有取消入口。
+    「去支付 / 申请退款」都是模拟操作，不接任何真实支付通道，不会产生扣款。
   </view>
 </view>
