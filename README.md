@@ -95,6 +95,21 @@
 
 如果希望在本机自己跑一套（改代码、直接看数据库），按 3.3 操作——界面与功能完全相同。
 
+#### 3.2.1 开发版 / 体验版 / 正式版 的差别
+
+| 版本 | 谁能打开 | 域名校验 | 本项目状态 |
+| --- | --- | --- | --- |
+| 开发版 | 开发者工具、开发者本人 | 可关闭（「详情 → 本地设置」） | ✅ 可运行 |
+| 体验版 | 体验成员（老师微信号已加入） | **强制**，除非开一次「开发调试」 | ✅ 已上传 |
+| 正式版 | 任何人扫码 / 搜索 | **强制**，没有任何开关可绕过 | ❌ 不提交，见下 |
+
+正式版走不通是**两条独立的硬门槛**，与代码实现无关：
+
+1. **服务器域名**：正式版的每个请求都必须落在小程序后台「request 合法域名」里，而该域名必须已完成 ICP 备案；云托管的默认公网域名被官方禁止填入（3.2 已说明）。不买域名、不备案，任何版本都过不了这一关。
+2. **服务类目资质**：本项目展示诊所信息、医师与预约挂号，属于「医疗健康」类目，需《医疗机构执业许可证》且主体须为企业 / 医疗机构；**个人主体连选择该类目的资格都没有**，即使域名合规也会在类目审核处被驳回。
+
+所以交付形态定为「体验版 + 本机运行」，不提交审核——这既是资质现实，也避免反复驳回影响账号信用。将来真要发布，只有两条路：① 主体升级为企业并取得医疗资质 + 备案域名；② 去掉预约挂号等诊疗功能、改造成纯科普或工具类后重新选类目。
+
 #### 3.3 本地运行步骤
 
 1. **安装微信开发者工具**（稳定版），用微信扫码登录。
@@ -123,6 +138,7 @@
 | 页面提示网络错误 / 请求超时 | 用手机浏览器打开 `https://springboot-vaij-353722-13-1540473897.sh.run.tcloudbase.com/api/health`，应返回 `{"ok":true,"db":"app.db","users":5}`（最小实例为 0 时首次要等 10–30 秒冷启动）。云端正常还报错，就是域名白名单问题，见下一条 |
 | 提示 `url not in domain list` | 小程序只允许访问白名单域名，而云托管默认域名**不许**配进白名单（见 3.2 的说明）。按 3.2 打开一次「开发调试」即可；想彻底免掉需绑定已备案的自定义域名（`DEPLOY.md` §12.8） |
 | 连自己本机后端时连不上 | 确认第 4、5、6 步都做了，并用手机浏览器打开 `http://<你的IP>:3000/api/health` 验证 |
+| 开发者工具里白屏 / 只显示「加载失败」 | 看红字定位：若含 `url not in domain list`，按第 7 步勾「不校验合法域名」再「清缓存 → 全部清除」重新编译；若提示连不上后端，用浏览器打开 `https://…/api/health` 验证云端是否在跑。另外导入目录必须是 `miniprogram` 本身，选成仓库根目录会直接报找不到 `app.json` |
 | 手机能打开网页、小程序却连不上 | Windows 防火墙拦了 Node，放行「专用网络」即可 |
 | 登录成功但后续请求 401 | 检查 `config.js` 是否已从 `localhost` 改成局域网 IP，改完需重新编译（工具里点「编译」） |
 | 后端端口不是 3000 | 若用 `PORT=8000 npm start` 启动，`BASE_URL` 里也要写 `8000`，两处必须一致 |
@@ -175,11 +191,11 @@ npm run test:api     # 接口回归：22 组 / 266 条断言
 npm run test:race    # 并发防重：2 组 / 7 条
 npm run test:ui      # 展示页交互：7 组 / 31 条
 npm run test:e2e     # 端到端流程：9 组 / 45 条
-npm run test:mp      # 小程序工程静态检查：6 组 / 49 条
+npm run test:mp      # 小程序工程静态检查：6 组 / 51 条
 npm run mock:mp      # 小程序逻辑模拟：7 组 / 44 条
 ```
 
-以上六套合计 **442 条断言**，当前全部通过。完整的实现细节、设计取舍与每一期的验证记录见 `README.md` 正文各章。
+以上六套合计 **444 条断言**，当前全部通过。完整的实现细节、设计取舍与每一期的验证记录见 `README.md` 正文各章。
 
 ---
 
@@ -311,7 +327,7 @@ Dental Clinic/
 │   ├── concurrency-test.mjs  # 并发抢位：单进程 8 并发 + 双进程 TOCTOU，2 组 / 7 条
 │   ├── race-worker.cjs       # 上面的双进程子进程（故意写「读→延迟→写」的竞态）
 │   ├── e2e.mjs               # 端到端：真服务 + 真浏览器点按钮，9 组 / 45 条（含 Network 自检）
-│   ├── miniprogram-check.mjs # 小程序静态体检：结构 / 无 DOM / token 通道，6 组 / 49 条
+│   ├── miniprogram-check.mjs # 小程序静态体检：结构 / 无 DOM / token 通道，6 组 / 51 条
 │   ├── miniprogram-mock.mjs  # 小程序页面模拟：wx 垫片 + 真后端跑页面，7 组 / 44 条
 │   └── capture-payment.mjs   # 支付页截图 + Network 请求清单（审查用，输出到 .workbuddy/shots）
 ├── assets/
@@ -662,7 +678,7 @@ node scripts/regression.mjs --json   # 另外写 scripts/regression-result.json
 | 小程序页面模拟组 / 断言 | 7 / 44 | `scripts/miniprogram-mock.mjs`：wx 垫片跑真实 `onLoad` / 点击处理，覆盖「未登录 → 注册 → 登录 → 预约 → 取消 → token 过期」 | `npm run mock:mp` 末尾汇总 |
 | 小程序页面数 | 9 | 5 个 tab + 服务详情 + 我的预约 + 登录 + 注册（后 4 个都是 `navigateTo` / `reLaunch`，不在 tabBar） | `miniprogram/app.json` 的 `pages` 长度 |
 | 小程序文件数 | 44 | 根级 6（`app.js`/`app.json`/`app.wxss`/`config.js`/`project.config.json`/`sitemap.json`）+ `utils` 2 + 9 页 × 四件套 36。**不含**开发者工具首次导入后自动生成的 `project.private.config.json`（本地配置，已在 `.gitignore` 排除） | `find miniprogram -type f ! -name project.private.config.json \| wc -l` |
-| 六套断言合计 | 442 | 266 + 7 + 31 + 45 + 49 + 44；**这是「断言条数」不是「测试用例数」**，一次 `check()` 记 1 条，一个 `group()` 记 1 组（合计 53 组） | `npm run test:all` 六段「按组汇总」相加 |
+| 六套断言合计 | 444 | 266 + 7 + 31 + 45 + 51 + 44；**这是「断言条数」不是「测试用例数」**，一次 `check()` 记 1 条，一个 `group()` 记 1 组（合计 53 组） | `npm run test:all` 六段「按组汇总」相加 |
 | token 有效期 | 2 小时 | `server/jwt.js` 的 `TTL_SECONDS = 7200`，与 Web 会话 `maxAge` 同值；断言 `exp - iat === 7200` | `npm run test:api` 第 22 组 |
 | 小程序本地存储 | 1 个键 | 只有 `token`（`wx.setStorageSync('token')`）；**不存密码**、不存用户资料 | `grep -n "StorageSync" miniprogram/utils/request.js` |
 | 小程序公开接口 | 3 | `/api/public/clinic`、`/doctors`、`/services`；免登录、只读、60 次/分钟/来源 | `server/routes/public.js` |
@@ -749,7 +765,7 @@ npm run test:api    # 接口回归：22 组 / 266 条（19 组支付、20 组价
 npm run test:race   # 并发抢位：2 组 / 7 条（多进程）
 npm run test:ui     # 展示页回归：7 组 / 31 条（需要浏览器）
 npm run test:e2e    # 端到端：真服务 + 真浏览器，9 组 / 45 条（需要浏览器，含 Network 自检）
-npm run test:mp     # 小程序静态体检：6 组 / 49 条（不需要开发者工具）
+npm run test:mp     # 小程序静态体检：6 组 / 51 条（不需要开发者工具）
 npm run mock:mp     # 小程序页面模拟：7 组 / 44 条（wx 垫片 + 临时服务）
 npm run test:all    # 依次跑上面六套（不含截图脚本）
 ```
@@ -2009,7 +2025,7 @@ npm run test:api    # 22 组 / 266 条：真实 HTTP + 临时库（端口 3101�
 npm run test:race   #  2 组 /   7 条：单进程 8 并发 + 双进程 TOCTOU
 npm run test:ui     #  7 组 /  31 条：file:// + 真浏览器（导航 / 表单 / 联动 / 价格渲染）
 npm run test:e2e    #  9 组 /  45 条：真服务 + 真浏览器点完整流程（端口 3102 / CDP 9444）
-npm run test:mp     #  6 组 /  49 条：小程序静态体检（结构 / 无 DOM / token 通道 / 页面结构）
+npm run test:mp     #  6 组 /  51 条：小程序静态体检（结构 / 无 DOM / token 通道 / 页面结构）
 npm run mock:mp     #  7 组 /  44 条：wx 垫片跑真实页面（登录 → 预约 → 取消 → 401）
 npm run test:all    # 依次跑上面六套
 ```
@@ -2273,7 +2289,7 @@ GET /api/public/nothing  → 404 JSON（公开接口就 3 个）
 | 脚本 | 做什么 | 结果 |
 | --- | --- | --- |
 | `npm run test:api` | 第 22 组专测 Bearer 通道：token 能进、角色越界 403、过期 401、改 payload 401、换密钥 401、坏头不回落 cookie、停用即失效、密钥缺失 / 过短拒绝启动 | **第 22 组 32 条 ✅**（全量 22 组 / 266 条） |
-| `npm run test:mp` | 文件级体检：9 页四件套、tabBar 顺序、无 DOM API、无 `<img>`、无外部域名、页面不硬编码电话 / 地址 / 医师名 / 手机号、无第三方 UI 库、token 只在网络层存取、云托管通道默认关闭且配错不污染本地开发、登录 / 预约 / 取消页的结构约束、WXSS 无 `:focus-visible` 与裸 `px` | **6 组 / 49 条 ✅** |
+| `npm run test:mp` | 文件级体检：9 页四件套、tabBar 顺序、无 DOM API、无 `<img>`、无外部域名、页面不硬编码电话 / 地址 / 医师名 / 手机号、无第三方 UI 库、token 只在网络层存取、云托管通道默认关闭且配错不污染本地开发、加载失败提示由 `backendHint()` 统一生成（页面不写死后端命令）、登录 / 预约 / 取消页的结构约束、WXSS 无 `:focus-visible` 与裸 `px` | **6 组 / 51 条 ✅** |
 | `npm run mock:mp` | 最小 `wx` / `Page` / `App` 垫片（含 storage / showModal / reLaunch），require **真实的页面文件**，跑「未登录 → 注册 → 登录 → 预约 → 取消」，再签一个**已过期**的 token 验 401 跳登录 | **7 组 / 44 条 ✅** |
 
 `mock:mp` 的页面 console（这就是「登录 → 预约 → 取消」的证据，比截图更可核对）：

@@ -124,6 +124,52 @@ function cloudErrorText(code, raw) {
   return '';
 }
 
+/* 当前 BASE_URL 是不是「公网 HTTPS 后端」。
+   本地（localhost / 局域网 IP）与云端，排查方向完全不同，
+   提示语必须分开写，否则必然误导 —— 以前三页写死了「npm start，3000 端口」，
+   后端搬到云端后，用户看到的是一句跟现状无关的话。 */
+function isRemoteBase() {
+  return !CLOUD_ENABLED && /^https:/i.test(BASE_URL);
+}
+
+/* wx.request 的 fail 是「一个字节都没收到」，errMsg 里通常已经点名了原因，
+   但都是英文/技术味的。这里翻成能照着做的话（返回 '' 表示没命中）。 */
+function transportErrorText(rawMsg, target) {
+  const t = String(rawMsg || '');
+
+  if (/url not in domain list/i.test(t)) {
+    return target + ' 不在小程序的 request 合法域名里。'
+      + '开发者工具：右上角「详情 → 本地设置」勾上「不校验合法域名…」；'
+      + '手机：先开一次「开发调试」，或换一个已 ICP 备案的域名'
+      + '（云托管默认域名永远加不进白名单，见 DEPLOY.md §12.8）。';
+  }
+  if (/timeout/i.test(t)) {
+    return target + ' 响应超时：后端没起来，或网络不通。'
+      + '云端最小实例为 0 时，首次访问要等 10–30 秒冷启动，稍后重试即可。';
+  }
+  if (/ssl|handshake|certificate/i.test(t)) {
+    return 'HTTPS 证书校验失败：常见于自签证书、系统代理或抓包工具。'
+      + '关掉代理后重试；正式环境必须用受信任证书。';
+  }
+  if (/ERR_NAME_NOT_RESOLVED|dns|resolve host/i.test(t)) {
+    return '域名解析失败：config.js 里的地址拼错了，或本机 DNS / 代理异常。';
+  }
+  return '';
+}
+
+/* 「加载失败」时给用户看的一句下一步：说清现在连的是哪儿。
+   写成函数而不是写死在 wxml 里，换环境时不用再改三个页面。 */
+function backendHint() {
+  if (CLOUD_ENABLED) {
+    return '云端通道：确认云托管服务状态为「运行中」，并核对 config.js 里的 env / service。';
+  }
+  if (isRemoteBase()) {
+    return '云端后端：用浏览器打开 ' + BASE_URL + '/api/health 应返回 JSON；'
+      + '手机首次使用需在右上角「…」里开一次「开发调试」。';
+  }
+  return '本机后端：确认 npm start 已运行，并在「详情 → 本地设置」勾选「不校验合法域名」。';
+}
+
 function normalizeError(statusCode, body) {
   const code = (body && (body.code || body.error_code)) || 'HTTP_' + statusCode;
   let message = (body && (body.error || body.message)) || '';
@@ -224,22 +270,29 @@ function request(options) {
     }
 
     function onFail(err) {
+      const raw = String((err && (err.errMsg || err.message)) || '');
+
       /* 云通道失败时，SDK 的 errMsg 里带着真实的网关错误（-501000 等）。
          先把它翻译成人话，再决定要不要提示「服务没部署」。 */
-      const raw = String((err && (err.errMsg || err.message)) || '');
-      const mapped = cloudErrorText('', raw);
-      if (CLOUD_ENABLED && mapped) {
-        reject(createError('CLOUD_GATEWAY', mapped, { body: err }));
+      const gateway = CLOUD_ENABLED ? cloudErrorText('', raw) : '';
+      if (gateway) {
+        reject(createError('CLOUD_GATEWAY', gateway, { body: err, detail: raw }));
         return;
       }
 
-      /* 连不上后端时最常见的原因：
-         HTTP 模式 —— 服务没启动 / 手机与电脑不同网段 / 没勾「不校验合法域名」；
-         云托管模式 —— 服务没部署成功 / 服务名填错 / 环境 ID 填错。 */
-      const hint = CLOUD_ENABLED
-        ? '请确认云托管服务已部署且状态为「运行中」，并核对 config.js 里的 env 与 service。'
-        : '请确认 npm start 已运行，并已勾选「不校验合法域名」。';
-      reject(createError('NETWORK', '连接不上后端（' + backendLabel() + '）。' + hint, { body: err }));
+      /* 域名白名单 / 超时 / 证书 / DNS：errMsg 已经点名了原因，翻译过来就能照着修。
+         这几类以前都被归进「请确认 npm start 已运行」，明明后端在云端，提示却在说本机。 */
+      const transport = transportErrorText(raw, backendLabel());
+      if (transport) {
+        reject(createError('NETWORK', transport, { body: err, detail: raw }));
+        return;
+      }
+
+      reject(createError(
+        'NETWORK',
+        '连接不上后端（' + backendLabel() + '）。' + backendHint(),
+        { body: err, detail: raw }
+      ));
     }
 
     if (CLOUD_ENABLED) {
@@ -299,6 +352,7 @@ module.exports = {
   BASE_URL: BASE_URL,
   CLOUD_ENABLED: CLOUD_ENABLED,
   backendLabel: backendLabel,
+  backendHint: backendHint,
   TOKEN_KEY: TOKEN_KEY,
   LOGIN_PAGE: LOGIN_PAGE,
   request: request,

@@ -222,6 +222,13 @@ check('云通道只在 env 与 service 都填了才生效（配错不弄挂本�
   /CLOUD\.enabled && CLOUD\.env && CLOUD\.service/.test(req), '');
 check('云托管初始化在 app.js 的 onLaunch，且未开启时直接返回',
   /wx\.cloud\.init/.test(read('app.js')) && /if \(!cloud\.enabled \|\| !cloud\.env\) return;/.test(read('app.js')), '');
+check('加载失败的提示来自 request.backendHint()，三页不再写死「npm start」',
+  /function backendHint/.test(req) && /backendHint: backendHint/.test(req) &&
+  ['pages/index/index.wxml', 'pages/doctors/doctors.wxml', 'pages/services/services.wxml']
+    .every(function (p) { return /\{\{errorHint\}\}/.test(read(p)) && !/npm start/.test(read(p)); }),
+  '');
+check('域名白名单类失败有专门文案（url not in domain list → 可行动的中文提示）',
+  /url not in domain list/.test(req) && /function transportErrorText/.test(req), '');
 
 /* ---------- 5. 认证与预约页结构 ---------- */
 group('5. 登录 / 注册 / 预约 / 我的预约');

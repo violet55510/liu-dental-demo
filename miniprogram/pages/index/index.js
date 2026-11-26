@@ -16,6 +16,7 @@ Page({
   data: {
     loading: true,
     error: '',
+    errorHint: '',
     clinic: null,
     today: null,
     services: [],
@@ -69,7 +70,11 @@ Page({
         if (fromPull) wx.stopPullDownRefresh();
       })
       .catch(function (err) {
-        that.setData({ loading: false, error: err.message || '加载失败，请稍后重试' });
+        that.setData({
+          loading: false,
+          error: err.message || '加载失败，请稍后重试',
+          errorHint: request.backendHint()
+        });
         if (fromPull) wx.stopPullDownRefresh();
       });
   },

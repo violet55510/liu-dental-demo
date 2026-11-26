@@ -5,11 +5,13 @@
    价格是服务端格式化好的字符串（price_text），前端不做任何换算。
    ========================================================= */
 const api = require('../../utils/api');
+const request = require('../../utils/request');
 
 Page({
   data: {
     loading: true,
     error: '',
+    errorHint: '',
     services: []
   },
 
@@ -33,7 +35,11 @@ Page({
         if (fromPull) wx.stopPullDownRefresh();
       })
       .catch(function (err) {
-        that.setData({ loading: false, error: err.message || '加载失败，请稍后重试' });
+        that.setData({
+          loading: false,
+          error: err.message || '加载失败，请稍后重试',
+          errorHint: request.backendHint()
+        });
         if (fromPull) wx.stopPullDownRefresh();
       });
   },

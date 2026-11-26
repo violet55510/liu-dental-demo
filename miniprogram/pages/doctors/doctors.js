@@ -9,11 +9,13 @@
    这两个标记来自 data.js，不是前端猜的 —— 演示数据不该冒充已核实信息。
    ========================================================= */
 const api = require('../../utils/api');
+const request = require('../../utils/request');
 
 Page({
   data: {
     loading: true,
     error: '',
+    errorHint: '',
     doctors: []
   },
 
@@ -37,7 +39,11 @@ Page({
         if (fromPull) wx.stopPullDownRefresh();
       })
       .catch(function (err) {
-        that.setData({ loading: false, error: err.message || '加载失败，请稍后重试' });
+        that.setData({
+          loading: false,
+          error: err.message || '加载失败，请稍后重试',
+          errorHint: request.backendHint()
+        });
         if (fromPull) wx.stopPullDownRefresh();
       });
   },
