@@ -33,6 +33,7 @@ data
 # ---------- 部署文档与平台配置（镜像里用不到） ----------
 README.md
 DEPLOY.md
+docs
 render.yaml
 Dockerfile
 .dockerignore
