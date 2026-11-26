@@ -636,7 +636,77 @@ check('所有请求都是本站 /api/*（没有外部地址）',
 check('所有请求都走 utils/request.js 的 BASE_URL（页面里没有第二个地址来源）',
   externalHits.length === 0, externalHits.join(' | '));
 
-/* ---------- 10. 收尾 ---------- */
+/* ---------- 10. 云托管通道（callContainer）与降级 ---------- */
+/* 这一组要测「云通道开着」的行为，而 request.js 在加载时就把 CLOUD.enabled 读进了常量，
+   改配置对象对已经加载的那份无效 —— 必须清缓存重新 require 一份，
+   并且放在最后一组，避免影响前面用 HTTP 通道跑的页面用例。 */
+group('9. 云托管通道与降级');
+
+const cfgReq = createRequire(path.join(MP, 'utils', 'request.js'));
+const cfgPath = cfgReq.resolve(path.join(MP, 'config.js'));
+const reqPath = cfgReq.resolve(path.join(MP, 'utils', 'request.js'));
+
+const cfgObj = cfgReq(cfgPath);
+cfgObj.CLOUD = {
+  enabled: true,
+  env: 'env-unit-test',
+  service: 'svc',
+  serviceAliases: ['svc-001'],
+  fallbackToHttp: true
+};
+
+delete cfgReq.cache[reqPath];
+const cloudReq = cfgReq(reqPath);
+
+const cloudHits = [];
+let cloudMode = 'host-error-then-ok';
+wx.cloud = {
+  callContainer: (o) => {
+    const svc = (o.header || {})['X-WX-SERVICE'];
+    cloudHits.push(svc);
+
+    if (cloudMode === 'host-error-then-ok' && svc === 'svc') {
+      if (o.fail) o.fail({ errMsg: 'cloud.callContainer:fail Error: errCode: -501000 | errMsg: Invalid host' });
+      return;
+    }
+    if (cloudMode === 'host-error-then-ok' && svc === 'svc-001') {
+      /* callContainer 在部分基础库里把响应体给成字符串，网络层必须自己解析 */
+      if (o.success) o.success({ statusCode: 200, data: '{"ok":true,"via":"cloud"}' });
+      return;
+    }
+    if (o.fail) o.fail({ errMsg: 'cloud.callContainer:fail Error: errCode: -501000 | errMsg: Invalid host' });
+  }
+};
+
+const cloudOk = await cloudReq.request({ url: '/api/health', method: 'GET' }).catch((e) => e);
+check('云通道优先：请求先走 callContainer，不是 wx.request',
+  cloudHits.length > 0, JSON.stringify(cloudHits));
+check('X-WX-SERVICE 填服务名；Host 错时自动换别名重试（svc → svc-001）',
+  cloudHits[0] === 'svc' && cloudHits[1] === 'svc-001', JSON.stringify(cloudHits));
+check('callContainer 的字符串响应会被解析成对象（不是把字符串丢给页面）',
+  !!cloudOk && cloudOk.via === 'cloud', JSON.stringify(cloudOk));
+
+const beforeSecond = cloudHits.length;
+await cloudReq.request({ url: '/api/health', method: 'GET' }).catch(() => null);
+check('成功后记住可用服务名：第二次只发一次，直接用 svc-001',
+  cloudHits.length === beforeSecond + 1 && cloudHits[cloudHits.length - 1] === 'svc-001',
+  JSON.stringify(cloudHits.slice(beforeSecond)));
+
+/* 云通道彻底不通（比如环境确实不属于本小程序）→ 应该降级到公网域名，而不是整站白屏 */
+cloudMode = 'always-host-error';
+const httpBefore = calls.filter((c) => c[0] === 'request').length;
+const viaHttp = await cloudReq.request({ url: '/api/health', method: 'GET' }).catch((e) => e);
+check('云通道全不通时降级走公网域名（fallbackToHttp），结果依然正确',
+  !!viaHttp && viaHttp.ok === true, JSON.stringify(viaHttp).slice(0, 120));
+check('降级确实改用 wx.request 发（不是把错误直接抛给页面）',
+  calls.filter((c) => c[0] === 'request').length === httpBefore + 1, '');
+
+const beforeSkip = cloudHits.length;
+await cloudReq.request({ url: '/api/health', method: 'GET' }).catch(() => null);
+check('确认服务名/环境不通后，本次启动不再空试云通道（省掉每请求一轮等待）',
+  cloudHits.length === beforeSkip, JSON.stringify(cloudHits.slice(beforeSkip)));
+
+/* ---------- 11. 收尾 ---------- */
 console.log = realLog;
 console.error = realErr;
 

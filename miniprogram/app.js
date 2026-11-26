@@ -34,11 +34,17 @@ App({
       return;
     }
 
-    wx.cloud.init({
-      env: cloud.env,
-      /* 不采集用户访问痕迹，演示项目不需要 */
-      traceUser: false
-    });
+    try {
+      wx.cloud.init({
+        env: cloud.env,
+        /* 不采集用户访问痕迹，演示项目不需要 */
+        traceUser: false
+      });
+    } catch (e) {
+      /* init 失败不应该连启动都挂掉：request.js 会拿到具体错误，
+         并且按 fallbackToHttp 决定要不要退回公网域名 */
+      console.error('[cloud] 云托管初始化失败：' + ((e && e.message) || e));
+    }
   },
 
   /* 跨页共享的诊所信息缓存，带 5 分钟过期 */
