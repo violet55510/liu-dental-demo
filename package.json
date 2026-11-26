@@ -2,7 +2,7 @@
   "name": "liu-dental-demo",
   "version": "2.6.0",
   "private": true,
-  "description": "刘氏口腔演示站 · 展示 / 认证 / 预约 / 医生闭环 / 模拟支付 + 微信小程序端（展示 + JWT Bearer 登录 + 病人预约；Node + Express + SQLite；价格单一来源；不接入任何真实支付通道；小程序不发布；Koyeb Docker 部署）",
+  "description": "齿记工具助手演示站 · 展示 / 认证 / 预约 / 医生闭环 / 模拟支付 + 微信小程序端（展示 + JWT Bearer 登录 + 病人预约；Node + Express + SQLite；价格单一来源；不接入任何真实支付通道；小程序不发布；Koyeb Docker 部署）",
   "main": "server/app.js",
   "scripts": {
     "start": "node server/app.js",

@@ -283,7 +283,7 @@ function lanAddresses() {
 }
 
 const server = app.listen(PORT, HOST, () => {
-  console.log(`刘氏口腔演示站已启动  监听 ${HOST}:${PORT}`);
+  console.log(`齿记工具助手演示站已启动  监听 ${HOST}:${PORT}`);
   /* localhost 在某些 Windows 环境会先解析成 ::1，而这里绑的是 IPv4 全网卡，
      所以本机调试统一推荐 127.0.0.1，少一类「明明启动了却打不开」的困惑。 */
   console.log(`本机访问：http://127.0.0.1:${PORT}`);

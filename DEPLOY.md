@@ -1,4 +1,4 @@
-# DEPLOY.md — 把「刘氏口腔演示站」部署到云端
+# DEPLOY.md — 把「齿记工具助手演示站」部署到云端
 
 > **主方案：Koyeb 免费实例（Docker 构建，不绑卡）。**
 > **备选：Render（原方案，步骤完整保留在[附录 R](#附录-r备选路线-render原方案)）**——放弃的原因是 Render 免费层要绑信用卡验证，国内卡不被接受。
@@ -94,7 +94,7 @@ npm start
 控制台应出现类似这几行（**看到 `已启动` 就对了**）：
 
 ```
-刘氏口腔演示站已启动  http://localhost:3000
+齿记工具助手演示站已启动  http://localhost:3000
 数据库：…\data\app.db
 会话密钥：data/.session-secret（本次新生成）
 令牌密钥：由会话密钥派生（HMAC-SHA256 / lsd/jwt/v1）（Bearer token 有效期 2 小时）
@@ -249,7 +249,7 @@ Step …   : exporting to image / pushing image               ← 镜像构建�
 镜像构建成功后，Koyeb 启动容器，应用自己的日志（这是**最该看的一段**）：
 
 ```
-刘氏口腔演示站已启动  http://localhost:8000
+齿记工具助手演示站已启动  http://localhost:8000
 数据库：/app/data/app.db
 会话密钥：data/.session-secret（本次新生成）
 令牌密钥：由会话密钥派生（HMAC-SHA256 / lsd/jwt/v1）（Bearer token 有效期 2 小时）
@@ -271,7 +271,7 @@ Step …   : exporting to image / pushing image               ← 镜像构建�
 **等价环境实测（本机，`PORT=8000 DB_PATH=data/app.db NODE_ENV=production TZ=Asia/Shanghai`）：**
 
 ```
-刘氏口腔演示站已启动  http://localhost:8000
+齿记工具助手演示站已启动  http://localhost:8000
 数据库：…\app\data\app.db          ← data/ 不存在也能自建（db.js 里 mkdirSync recursive）
 已创建种子账号：5 个                ← admin + 4 位医生
 已生成种子排班：196 个时段
@@ -305,7 +305,7 @@ POST /api/login（模拟 HTTPS 代理头）→ 200 + token + Set-Cookie: Secure
 
 **② 首页**
 
-打开 `https://<你的网址>/`，应看到「刘氏口腔」首页，电话、地址、今日门诊、8 项服务、4 位医师都在。
+打开 `https://<你的网址>/`，应看到「齿记工具助手」首页，电话、地址、今日门诊、8 项服务、4 位医师都在。
 如果首页白屏但 health 正常，按 `F12` 看 Console 的报错（多半是浏览器缓存，`Ctrl + F5` 强刷）。
 
 **③ 登录一次**
@@ -449,7 +449,7 @@ npm start
 ```
 
 ```
-刘氏口腔演示站已启动  监听 0.0.0.0:3000
+齿记工具助手演示站已启动  监听 0.0.0.0:3000
 本机访问：http://127.0.0.1:3000
 同一局域网 / 手机真机访问（填进 miniprogram/config.js 的 BASE_URL）：
   http://192.168.1.23:3000   [WLAN]
@@ -915,7 +915,7 @@ git push
 
 ```
 ==> Running 'npm start'
-刘氏口腔演示站已启动  http://localhost:10000
+齿记工具助手演示站已启动  http://localhost:10000
 ```
 
 > 端口由 Render 通过 `PORT` 环境变量注入（实例内部是 10000），
