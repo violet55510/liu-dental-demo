@@ -15,6 +15,9 @@ const request = require('../../utils/request');
 Page({
   data: {
     loading: true,
+    /* 超过 4 秒还没回来就打开这句：云端缩容后首次访问要等容器启动（10–30 秒），
+       只给一个空白转圈，用户会以为打不开就退出去。 */
+    waking: false,
     error: '',
     errorHint: '',
     clinic: null,
@@ -38,10 +41,16 @@ Page({
 
   load: function (fromPull) {
     const that = this;
-    this.setData({ loading: true, error: '' });
+    this.setData({ loading: true, waking: false, error: '' });
+
+    if (this._slowTimer) clearTimeout(this._slowTimer);
+    this._slowTimer = setTimeout(function () {
+      if (that.data.loading) that.setData({ waking: true });
+    }, 4000);
 
     return Promise.all([api.getClinic(), api.getDoctors(), api.listServices()])
       .then(function (res) {
+        if (that._slowTimer) clearTimeout(that._slowTimer);
         const clinic = res[0];
         const doctors = res[1];
         const services = res[2];
@@ -70,8 +79,10 @@ Page({
         if (fromPull) wx.stopPullDownRefresh();
       })
       .catch(function (err) {
+        if (that._slowTimer) clearTimeout(that._slowTimer);
         that.setData({
           loading: false,
+          waking: false,
           error: err.message || '加载失败，请稍后重试',
           errorHint: request.backendHint()
         });

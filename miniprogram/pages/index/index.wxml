@@ -4,6 +4,8 @@
   <!-- 加载中 -->
   <view wx:if="{{loading}}" class="state">
     正在加载诊所信息…
+    <text wx:if="{{waking}}" class="state-tip">云端服务可能正在唤醒：缩容后第一次访问要等容器启动（约 10–30 秒），已自动重试，请稍候。</text>
+    <button wx:if="{{waking}}" class="btn btn--ghost" bindtap="reload">立即重试</button>
   </view>
 
   <!-- 加载失败：给出可点的重试，而不是空白页 -->

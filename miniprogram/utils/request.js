@@ -63,6 +63,22 @@ function isHostError(err) {
   return /INVALID_HOST|-501000|Host is invalid|service not found|Cannot find path|-606004/i.test(raw);
 }
 
+/* 「一个字节都没回来」且像是连接层的问题：超时、连接被拒/重置。
+   这类失败在冷启动场景里最常见 —— 容器在启动，不是代码/配置错了，值得重试。 */
+function isColdStartError(err) {
+  const raw = String((err && (err.errMsg || err.message)) || '');
+  return /timeout|timed out|ECONNRESET|ECONNREFUSED|ERR_CONNECTION|net::|超时/i.test(raw);
+}
+
+/* 重试的准入条件：只读方法、不是登录失效、且错误类型可自愈。
+   5xx 也算：网关在容器没就绪时会先返回 502/503，等几秒就恢复。 */
+function isRetryable(err, method) {
+  if (!/^(GET|HEAD)$/i.test(String(method || 'GET'))) return false;
+  if (!err || err.needLogin) return false;
+  if (err.retryable) return true;
+  return err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504;
+}
+
 /* 报错文案里显示「连的是哪儿」，两种通道说法不同 */
 function backendLabel() {
   return CLOUD_ENABLED ? ('微信云托管「' + CLOUD.service + '」') : BASE_URL;
@@ -83,6 +99,24 @@ const DEFAULT_TIMEOUT = 8000;
    云端最小实例为 0 时首次请求要等冷启动，所以云通道给足 15 秒，
    HTTP 通道保持原来的 8 秒 —— 本机后端不该等那么久。 */
 const CLOUD_TIMEOUT_MAX = 15000;
+
+/* 超时按「目标」分：本机后端 8 秒够了；云端（云托管或公网域名）可能正在冷启动，
+   8 秒必然失败 —— 这不是慢，是容器还没起来。 */
+function effectiveTimeout() {
+  if (CLOUD_ENABLED) return CLOUD_TIMEOUT_MAX;
+  return isRemoteBase() ? CLOUD_TIMEOUT_MAX : DEFAULT_TIMEOUT;
+}
+
+/* ★ 冷启动重试 ★
+   微信云托管「最小实例数 0」时，版本连续 30 分钟无流量会缩容到 0，
+   下一个请求要等容器重新起来（官方文档：可能有 30 秒服务延迟）。
+   而 callContainer 的超时上限只有 15 秒 —— 客户端先超时，容器却还在启动。
+   结果是「隔一段时间第一次打开，首页必定报超时」，审核员看到的正是这个。
+
+   所以：只读请求（GET/HEAD）超时后按下面的间隔重发，累计等待约 53 秒，
+   足够覆盖一次冷启动。写操作（下单、建预约、取消）不自动重试 ——
+   网络超时无法判断服务端到底处理没有，重发可能产生重复数据。 */
+const RETRY_DELAYS = [2000, 6000];
 
 /* storage 的键名就叫 token（和后端约定的一致），不叫 access_token、
    也不加前缀 —— 键越少，越不容易在同名键上踩坑。 */
@@ -177,7 +211,8 @@ function transportErrorText(rawMsg, target) {
   }
   if (/timeout/i.test(t)) {
     return target + ' 响应超时：后端没起来，或网络不通。'
-      + '云端最小实例为 0 时，首次访问要等 10–30 秒冷启动，稍后重试即可。';
+      + '已自动重试仍未成功。云托管「最小实例数 0」时，缩容后首次访问要等 10–30 秒冷启动，'
+      + '再点一次「重新加载」通常就能进；想彻底消除，把最小实例数设为 1。';
   }
   if (/ssl|handshake|certificate/i.test(t)) {
     return 'HTTPS 证书校验失败：常见于自签证书、系统代理或抓包工具。'
@@ -194,7 +229,8 @@ function transportErrorText(rawMsg, target) {
 function backendHint() {
   if (CLOUD_ENABLED) {
     return '云托管通道：确认服务状态为「运行中」，服务名取列表卡片上的名字（不带 -001），'
-      + '并在云开发控制台确认该环境已关联本小程序。';
+      + '并在云开发控制台确认该环境已关联本小程序。'
+      + '若「隔一段时间第一次打开」总是超时，是实例被缩容到 0 了：把「最小实例数」设为 1。';
   }
   if (isRemoteBase()) {
     return '云端后端：用浏览器打开 ' + BASE_URL + '/api/health 应返回 JSON；'
@@ -276,128 +312,161 @@ function request(options) {
   assertLocalPath(url);
 
   const method = opts.method || 'GET';
-  const timeout = opts.timeout || DEFAULT_TIMEOUT;
+  const timeout = opts.timeout || effectiveTimeout();
   const header = buildHeader(!!opts.withAuth);
   const data = opts.data || undefined;
 
-  return new Promise(function (resolve, reject) {
-    /* 云通道最后一次的原始错误：两条路都不通时优先报它，信息量更大 */
-    let cloudError = null;
+  /* 重试间隔可被单个请求覆盖（页面需要「最多等 3 秒」时传 retryDelays: []） */
+  const delays = Array.isArray(opts.retryDelays) ? opts.retryDelays : RETRY_DELAYS;
+  const maxAttempts = delays.length + 1;
 
-    function onSuccess(res) {
-      const status = res.statusCode;
-      const body = parseBody(res.data);
+  /* 一次「尝试」= 走完一条通道（云通道失败可能还会试别名、或降级公网）。
+     重试放在这一层：容器在启动时，换通道没有意义，等几秒再打才是对的。 */
+  function attempt(n) {
+    const isLast = n >= maxAttempts - 1;
 
-      if (status >= 200 && status < 300) {
-        resolve(body);
+    return new Promise(function (resolve, reject) {
+      /* 云通道最后一次的原始错误：两条路都不通时优先报它，信息量更大 */
+      let cloudError = null;
+
+      /* 失败的唯一出口：可自愈且还有次数就重排，否则把错误抛给页面 */
+      function finish(err) {
+        if (!isLast && isRetryable(err, method)) {
+          setTimeout(function () {
+            attempt(n + 1).then(resolve, reject);
+          }, delays[n]);
+          return;
+        }
+        reject(err);
+      }
+
+      function onSuccess(res) {
+        const status = res.statusCode;
+        const body = parseBody(res.data);
+
+        if (status >= 200 && status < 300) {
+          resolve(body);
+          return;
+        }
+
+        const err = normalizeError(status, body);
+
+        /* 只有「需要登录的请求」拿到 401 才跳登录。
+           登录接口自己的 401 是「账号或密码不正确」，
+           那种情况必须留在页面上给用户改密码（api.login 会显式关掉跳转）。 */
+        if (status === 401 && opts.withAuth && !opts.skipAuthRedirect) {
+          err.needLogin = true;
+          err.redirected = handleUnauthorized();
+        }
+
+        finish(err);
+      }
+
+      /* 把「一个字节都没收到」的错误翻成人话。
+         云通道优先按网关错误码翻译（-501000 之类），其次才是白名单/超时/证书。 */
+      function toNetworkError(err, channel) {
+        const raw = String((err && (err.errMsg || err.message)) || '');
+        const label = channel === 'cloud' ? ('微信云托管「' + CLOUD.service + '」') : BASE_URL;
+        /* 冷启动/连接层失败标记为可重试，交给外层 attempt 决定要不要再发一次 */
+        const retryable = isColdStartError(err);
+
+        if (channel === 'cloud') {
+          const gateway = cloudErrorText('', raw);
+          if (gateway) return createError('CLOUD_GATEWAY', gateway, { body: err, detail: raw, retryable: retryable });
+        }
+
+        /* 这几类以前都被归进「请确认 npm start 已运行」，明明后端在云端，提示却在说本机 */
+        const transport = transportErrorText(raw, label);
+        if (transport) return createError('NETWORK', transport, { body: err, detail: raw, retryable: retryable });
+
+        return createError('NETWORK', '连接不上后端（' + label + '）。' + backendHint(),
+          { body: err, detail: raw, retryable: retryable });
+      }
+
+      /* ---------- 通道 A：公网域名（wx.request） ---------- */
+      function callHttp() {
+        wx.request({
+          url: BASE_URL + url,
+          method: method,
+          data: data,
+          header: header,
+          timeout: timeout,
+          success: onSuccess,
+          fail: function (err) {
+            finish(cloudError ? toNetworkError(cloudError, 'cloud') : toNetworkError(err, 'http'));
+          }
+        });
+      }
+
+      /* ---------- 通道 B：云托管（免域名、免备案、免「开发调试」） ---------- */
+      function callCloud(service) {
+        wx.cloud.callContainer({
+          config: { env: CLOUD.env },
+          path: url,
+          method: method,
+          data: data,
+          header: Object.assign({}, header, { 'X-WX-SERVICE': service }),
+          /* 云通道单独给超时：上限 15 秒，超过微信会忽略 */
+          timeout: Math.min(opts.timeout || CLOUD_TIMEOUT_MAX, CLOUD_TIMEOUT_MAX),
+          success: function (res) {
+            /* 记住哪个写法通了，后面的请求直接用，不再逐个试 */
+            cloudState.service = service;
+            onSuccess(res);
+          },
+          fail: function (err) {
+            cloudError = err;
+            const list = cloudServices();
+            const i = list.indexOf(service);
+
+            /* 服务名写法不对（带不带 -001）：换下一个候选再试一次。
+               这类错误发生在网关路由阶段，请求根本没进容器，重试不会重复提交。 */
+            if (isHostError(err) && i >= 0 && i + 1 < list.length) {
+              callCloud(list[i + 1]);
+              return;
+            }
+
+            /* 确认是「服务名/环境」这类配置问题：本次启动不再尝试，免得每个请求都白等一轮 */
+            if (isHostError(err)) cloudState.down = true;
+
+            /* ★ 超时且还有重试次数：容器正在冷启动，这时改走公网域名只会把
+               同样的等待（两个通道打的是同一个容器）再来一遍。
+               交给外层等几秒再打，往往第二次就打到了刚起来的实例上。 */
+            if (!isLast && isColdStartError(err) && !isHostError(err)) {
+              finish(toNetworkError(err, 'cloud'));
+              return;
+            }
+
+            /* 本环境确实调不通时，允许降级走公网域名（体验版开着「开发调试」时可用）；
+               fallbackToHttp: false 就直接把原因报给用户，不掩盖问题。 */
+            if (CLOUD.fallbackToHttp !== false) {
+              callHttp();
+              return;
+            }
+            finish(toNetworkError(err, 'cloud'));
+          }
+        });
+      }
+
+      if (CLOUD_ENABLED && !cloudState.down) {
+        if (typeof wx.cloud === 'undefined' || typeof wx.cloud.callContainer !== 'function') {
+          finish(createError(
+            'NO_CLOUD',
+            '当前微信版本不支持云托管调用（需要基础库 2.23.0 及以上），请升级微信或把 config.js 的 CLOUD.enabled 改回 false。'
+          ));
+          return;
+        }
+
+        /* 云托管调用：path 只写路径，不用拼域名；X-WX-SERVICE 指定服务名。
+           这条路不受「request 合法域名」限制，也不需要开「开发调试」。 */
+        callCloud(cloudServices()[0]);
         return;
       }
 
-      const err = normalizeError(status, body);
+      callHttp();
+    });
+  }
 
-      /* 只有「需要登录的请求」拿到 401 才跳登录。
-         登录接口自己的 401 是「账号或密码不正确」，
-         那种情况必须留在页面上给用户改密码（api.login 会显式关掉跳转）。 */
-      if (status === 401 && opts.withAuth && !opts.skipAuthRedirect) {
-        err.needLogin = true;
-        err.redirected = handleUnauthorized();
-      }
-
-      reject(err);
-    }
-
-    /* 把「一个字节都没收到」的错误翻成人话。
-       云通道优先按网关错误码翻译（-501000 之类），其次才是白名单/超时/证书。 */
-    function toNetworkError(err, channel) {
-      const raw = String((err && (err.errMsg || err.message)) || '');
-      const label = channel === 'cloud' ? ('微信云托管「' + CLOUD.service + '」') : BASE_URL;
-
-      if (channel === 'cloud') {
-        const gateway = cloudErrorText('', raw);
-        if (gateway) return createError('CLOUD_GATEWAY', gateway, { body: err, detail: raw });
-      }
-
-      /* 这几类以前都被归进「请确认 npm start 已运行」，明明后端在云端，提示却在说本机 */
-      const transport = transportErrorText(raw, label);
-      if (transport) return createError('NETWORK', transport, { body: err, detail: raw });
-
-      return createError('NETWORK', '连接不上后端（' + label + '）。' + backendHint(),
-        { body: err, detail: raw });
-    }
-
-    /* ---------- 通道 A：公网域名（wx.request） ---------- */
-    function callHttp() {
-      wx.request({
-        url: BASE_URL + url,
-        method: method,
-        data: data,
-        header: header,
-        timeout: timeout,
-        success: onSuccess,
-        fail: function (err) {
-          reject(cloudError ? toNetworkError(cloudError, 'cloud') : toNetworkError(err, 'http'));
-        }
-      });
-    }
-
-    /* ---------- 通道 B：云托管（免域名、免备案、免「开发调试」） ---------- */
-    function callCloud(service) {
-      wx.cloud.callContainer({
-        config: { env: CLOUD.env },
-        path: url,
-        method: method,
-        data: data,
-        header: Object.assign({}, header, { 'X-WX-SERVICE': service }),
-        /* 云通道单独给超时：上限 15 秒，超过微信会忽略 */
-        timeout: Math.min(opts.timeout || CLOUD_TIMEOUT_MAX, CLOUD_TIMEOUT_MAX),
-        success: function (res) {
-          /* 记住哪个写法通了，后面的请求直接用，不再逐个试 */
-          cloudState.service = service;
-          onSuccess(res);
-        },
-        fail: function (err) {
-          cloudError = err;
-          const list = cloudServices();
-          const i = list.indexOf(service);
-
-          /* 服务名写法不对（带不带 -001）：换下一个候选再试一次。
-             这类错误发生在网关路由阶段，请求根本没进容器，重试不会重复提交。 */
-          if (isHostError(err) && i >= 0 && i + 1 < list.length) {
-            callCloud(list[i + 1]);
-            return;
-          }
-
-          /* 确认是「服务名/环境」这类配置问题：本次启动不再尝试，免得每个请求都白等一轮 */
-          if (isHostError(err)) cloudState.down = true;
-
-          /* 本环境确实调不通时，允许降级走公网域名（体验版开着「开发调试」时可用）；
-             fallbackToHttp: false 就直接把原因报给用户，不掩盖问题。 */
-          if (CLOUD.fallbackToHttp !== false) {
-            callHttp();
-            return;
-          }
-          reject(toNetworkError(err, 'cloud'));
-        }
-      });
-    }
-
-    if (CLOUD_ENABLED && !cloudState.down) {
-      if (typeof wx.cloud === 'undefined' || typeof wx.cloud.callContainer !== 'function') {
-        reject(createError(
-          'NO_CLOUD',
-          '当前微信版本不支持云托管调用（需要基础库 2.23.0 及以上），请升级微信或把 config.js 的 CLOUD.enabled 改回 false。'
-        ));
-        return;
-      }
-
-      /* 云托管调用：path 只写路径，不用拼域名；X-WX-SERVICE 指定服务名。
-         这条路不受「request 合法域名」限制，也不需要开「开发调试」。 */
-      callCloud(cloudServices()[0]);
-      return;
-    }
-
-    callHttp();
-  });
+  return attempt(0);
 }
 
 function get(url, data, extra) {

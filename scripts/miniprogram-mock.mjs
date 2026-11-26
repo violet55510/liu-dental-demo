@@ -660,6 +660,7 @@ const cloudReq = cfgReq(reqPath);
 
 const cloudHits = [];
 let cloudMode = 'host-error-then-ok';
+let timeoutOnce = false;
 wx.cloud = {
   callContainer: (o) => {
     const svc = (o.header || {})['X-WX-SERVICE'];
@@ -672,6 +673,20 @@ wx.cloud = {
     if (cloudMode === 'host-error-then-ok' && svc === 'svc-001') {
       /* callContainer 在部分基础库里把响应体给成字符串，网络层必须自己解析 */
       if (o.success) o.success({ statusCode: 200, data: '{"ok":true,"via":"cloud"}' });
+      return;
+    }
+    /* 冷启动：第一次超时（容器正在启动），之后正常 */
+    if (cloudMode === 'timeout-then-ok') {
+      if (!timeoutOnce) {
+        timeoutOnce = true;
+        if (o.fail) o.fail({ errMsg: 'cloud.callContainer:fail Error: timeout' });
+        return;
+      }
+      if (o.success) o.success({ statusCode: 200, data: '{"ok":true,"via":"cloud"}' });
+      return;
+    }
+    if (cloudMode === 'always-timeout') {
+      if (o.fail) o.fail({ errMsg: 'cloud.callContainer:fail Error: timeout' });
       return;
     }
     if (o.fail) o.fail({ errMsg: 'cloud.callContainer:fail Error: errCode: -501000 | errMsg: Invalid host' });
@@ -691,6 +706,29 @@ await cloudReq.request({ url: '/api/health', method: 'GET' }).catch(() => null);
 check('成功后记住可用服务名：第二次只发一次，直接用 svc-001',
   cloudHits.length === beforeSecond + 1 && cloudHits[cloudHits.length - 1] === 'svc-001',
   JSON.stringify(cloudHits.slice(beforeSecond)));
+
+/* ★ 冷启动重试 ★
+   云托管「最小实例数 0」时，缩容后第一个请求会超时（容器正在启动）。
+   以前这里直接把超时抛给页面 → 首页「打不开」。现在应自动重试。 */
+cloudMode = 'timeout-then-ok';
+timeoutOnce = false;
+const retryBase = cloudHits.length;
+const httpBase = calls.filter((c) => c[0] === 'request').length;
+const afterTimeout = await cloudReq.request({ url: '/api/health', method: 'GET', retryDelays: [0] }).catch((e) => e);
+check('云通道超时（冷启动）后自动重试，第二次成功拿到数据',
+  !!afterTimeout && afterTimeout.ok === true && afterTimeout.via === 'cloud',
+  JSON.stringify(afterTimeout).slice(0, 140));
+check('重试是真的又发了一次 callContainer（不是直接放弃）',
+  cloudHits.length === retryBase + 2, JSON.stringify(cloudHits.slice(retryBase)));
+check('冷启动超时时不立刻降级公网域名（同一容器的等待不该走两遍）',
+  calls.filter((c) => c[0] === 'request').length === httpBase, '');
+
+/* 写操作不能自动重发：网络超时无法判断服务端处理没有，重跑可能重复下单/重复建预约 */
+cloudMode = 'always-timeout';
+const postBase = cloudHits.length;
+const postErr = await cloudReq.request({ url: '/api/appointments', method: 'POST', data: {}, retryDelays: [0] }).catch((e) => e);
+check('写操作（POST）超时后不自动重试，直接把错误交给页面',
+  cloudHits.length === postBase + 1 && !!postErr && !!postErr.message, JSON.stringify(postErr).slice(0, 120));
 
 /* 云通道彻底不通（比如环境确实不属于本小程序）→ 应该降级到公网域名，而不是整站白屏 */
 cloudMode = 'always-host-error';
