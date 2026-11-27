@@ -54,11 +54,11 @@ Docker 镜像（node:22-slim + node_modules + 源码 + 9 个静态页 + assets�
 https://<服务名>-<组织>.koyeb.app
    ├── /                → 官网首页（5 个展示页 + 4 个账户页）
    ├── /api/*           → Express 接口（认证 / 预约 / 订单 / 公开接口）
-   └── /api/health      → 健康检查 → {"ok":true,"db":"app.db","users":5}
+   └── /api/health      → 健康检查 → {"ok":true,"db":"app.db","users":6}
 ```
 
 关键事实：**SQLite 文件在容器里，不在镜像里。** 镜像不含 `data/`（`.dockerignore` 排除），
-容器第一次启动时 `server/db.js` 自己建表、写 5 个种子账号、生成 196 个排班时段。
+容器第一次启动时 `server/db.js` 自己建表、写 6 个种子账号、生成 196 个排班时段。
 所以仓库里没有数据库，也不会把本机的演示数据（和 `.session-secret`）传到云端。
 
 > **Docker 只用于云端构建，本地开发不需要它。** 你照旧 `npm install && npm start`；
@@ -104,7 +104,7 @@ npm start
 另开一个终端验证两个地址：
 
 ```bash
-# 期望：{"ok":true,"db":"app.db","users":5}
+# 期望：{"ok":true,"db":"app.db","users":6}
 curl http://localhost:3000/api/health
 
 # 期望：返回首页 HTML（不是 404）
@@ -276,7 +276,7 @@ Step …   : exporting to image / pushing image               ← 镜像构建�
 已创建种子账号：5 个                ← admin + 4 位医生
 已生成种子排班：196 个时段
 
-GET  /api/health        → 200 {"ok":true,"db":"app.db","users":5}
+GET  /api/health        → 200 {"ok":true,"db":"app.db","users":6}
 GET  /                  → 200        GET /services.html → 200
 GET  /login.html        → 200        GET /payment.html  → 200
 GET  /README.md         → 404        GET /Dockerfile    → 404
@@ -296,11 +296,11 @@ POST /api/login（模拟 HTTPS 代理头）→ 200 + token + Set-Cookie: Secure
 浏览器打开 `https://<你的网址>/api/health`，期望：
 
 ```json
-{"ok":true,"db":"app.db","users":5}
+{"ok":true,"db":"app.db","users":6}
 ```
 
 - `ok: true` → 进程活着
-- `users: 5` → 种子账号已经写进去了（1 管理员 + 4 医生）
+- `users: 6` → 种子账号已经写进去了（1 管理员 + 4 医生 + 1 演示病人张三）
 - 打不开 / 502 → 见[第 13 节](#13-常见问题对着报错查)
 
 **② 首页**
@@ -466,7 +466,7 @@ npm start
 | macOS | `ipconfig getifaddr en0`，或「系统设置 → 网络 → Wi-Fi → 详细信息」 |
 | Linux | `hostname -I` 或 `ip -4 addr` |
 
-**拿到 IP 后先做一次验证**：手机浏览器打开 `http://<IP>:3000/api/health`，能看到 `{"ok":true,"db":"app.db","users":5}` 再去调小程序。出不来就别折腾小程序了，问题在网络层。
+**拿到 IP 后先做一次验证**：手机浏览器打开 `http://<IP>:3000/api/health`，能看到 `{"ok":true,"db":"app.db","users":6}` 再去调小程序。出不来就别折腾小程序了，问题在网络层。
 
 **还是打不开的两个常见原因**：
 
@@ -580,7 +580,7 @@ ngrok http 3000
 - **个人主体开通云托管需要先做微信认证，30 元/次**（不是 300，300 是企业主体）；卡在这一步的话就先别走这条路。
 - 首个云环境赠送 **40,000 资源点/月，有效期 6 个月**；这个演示站的量（几个页面 + 几十次请求）用不到十分之一。
   6 个月后按量计费或升基础套餐（¥19.9/月），可以到期直接停掉环境。
-- **容器文件系统不持久**：每次重新部署或冷启动，SQLite 会重新自举成种子数据（5 个账号 + 196 个时段）。
+- **容器文件系统不持久**：每次重新部署或冷启动，SQLite 会重新自举成种子数据（6 个账号 + 196 个时段）。
   而这台后端现在是 Web 端与小程序的**唯一数据来源**，重建等于两端数据一起清空 ——
   检查期间不要重新部署；要长期保存，按 12.9 挂载云文件存储。
 
@@ -608,9 +608,9 @@ ngrok http 3000
    已排除 `node_modules`、`data`、`miniprogram`、`scripts`）；
 4. 确认构建方式被识别为 **Dockerfile**（不是「Spring Boot」/「Java 模板」），端口填 **8000**；
 5. 确认发布 → 首次构建约 3–8 分钟（要装 `python3 make g++` 编译 `better-sqlite3`）；
-6. 构建完成后点「**公网域名访问**」，在地址后加 `/api/health`，应返回 `{"ok":true,"db":"app.db","users":5}`。
+6. 构建完成后点「**公网域名访问**」，在地址后加 `/api/health`，应返回 `{"ok":true,"db":"app.db","users":6}`。
 
-这一步能返回 `users:5`，说明云端跑的是我们的 Node 后端，可以继续往下。
+这一步能返回 `users:6`，说明云端跑的是我们的 Node 后端，可以继续往下。
 
 > 构建日志里若出现 `gyp ERR! find Python`，说明用的不是本仓库的 `Dockerfile`
 > （本项目 Dockerfile 的 builder 阶段已经装了 `python3 make g++`），检查上传的包根目录。
@@ -709,7 +709,7 @@ CloudBase 控制台建的，需要先在云开发控制台里把它关联/共享
    复制默认域名（形如 `https://<服务名>-<一串数字>.sh.run.tcloudbase.com`，`.sh` 是地域）。
    服务列表页右上角的「公网域名访问」按钮给的就是这个地址。
 2. **在浏览器里验一遍**：打开 `<域名>/api/health`。
-   - 看到 `{"ok":true,"db":"app.db","users":5}` → 云端跑的就是本仓库代码，继续；
+   - 看到 `{"ok":true,"db":"app.db","users":6}` → 云端跑的就是本仓库代码，继续；
    - 看到 Spring Boot 的白色报错页、或 404 → 服务里还是模板代码，先回 12.4 重新发布；
    - 一直转圈/超时 → 最小实例数为 0，冷启动 10–30 秒，等一会儿再刷。
 3. **不用改代码**：`fallbackToHttp: true` 时云通道失败会自动退回 `BASE_URL`，而它已经指向这个域名。

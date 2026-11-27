@@ -14,7 +14,7 @@ const crypto = require('node:crypto');
 const express = require('express');
 const session = require('express-session');
 
-const { db, DB_FILE, seededNow, seededSchedules } = require('./db');
+const { db, DB_FILE, seededNow, seededPatients, seededSchedules } = require('./db');
 const { initJwt, TTL_SECONDS } = require('./jwt');
 const authRoutes = require('./routes/auth');
 const protectedRoutes = require('./routes/protected');
@@ -299,6 +299,7 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`会话密钥：${secretInfo.source}`);
   console.log(`令牌密钥：${jwtInfo.source}（Bearer token 有效期 ${TTL_SECONDS / 3600} 小时）`);
   if (seededNow.length) console.log(`已创建种子账号：${seededNow.join(', ')}`);
+  if (seededPatients.length) console.log(`已创建演示病人账号：${seededPatients.join(', ')}（姓名：张三）`);
   if (seededSchedules) console.log(`已生成种子排班：${seededSchedules} 个时段（4 位医生 × 未来 14 天）`);
   /* 初始密码不写日志：日志可能被收集、转发，密码一律只出现在 README 的演示说明里 */
   console.log('种子账号的初始密码见 README「第二阶段 · 种子账号」');

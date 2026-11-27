@@ -57,7 +57,7 @@ if (left.length) {
 
 /* 第二步：重新 require db.js。它会建表、写种子账号、生成排班。
    必须放在 drop 之后 require：db.js 在模块顶层就执行建表与播种。 */
-const { seededNow, seededSchedules, db, stmts } = require('./db');
+const { seededNow, seededPatients, seededSchedules, db, stmts } = require('./db');
 
 const counts = {
   users: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
@@ -68,6 +68,7 @@ const counts = {
 
 console.log('已重置 ' + path.basename(DB_FILE));
 console.log('  种子账号 ' + counts.users + ' 个（新增 ' + (seededNow.length ? seededNow.join(', ') : '无') + '）');
+console.log('  演示病人 ' + (seededPatients.length ? seededPatients.join(', ') + '（张三）' : '已存在，跳过'));
 console.log('  在职医生 ' + counts.doctors + ' 位');
 console.log('  排班时段 ' + counts.schedules + ' 条（本次新增 ' + seededSchedules + '）');
 console.log('  预约记录 ' + counts.appointments + ' 条');

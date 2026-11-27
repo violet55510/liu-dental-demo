@@ -291,6 +291,13 @@ const SEED_USERS = [
 
 const ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10);
 
+/* 审核与演示用的病人账号：小程序必须登录才能进「我的预约」，
+   审核员不方便用自己的号注册，所以预置一个，密码同样是 Demo@1234。
+   用手机号做幂等键（病人账号的 CHECK 要求 phone 非空、email 为空）。 */
+const SEED_PATIENTS = [
+  { phone: '13800138001', name: '张三' }
+];
+
 function seed() {
   const exists = db.prepare('SELECT 1 FROM users WHERE email = ?');
   const insert = db.prepare(`
@@ -316,6 +323,29 @@ function seed() {
 }
 
 const seededNow = seed();
+
+/* 种子病人单独一段：上面的 seed() 按 email 判重，病人账号没有 email。
+   只在手机号不存在时插入，不覆盖用户自己注册/改过的账号。 */
+function seedPatients() {
+  const exists = db.prepare('SELECT 1 FROM users WHERE phone = ?');
+  const insert = db.prepare(`
+    INSERT INTO users (role, phone, password_hash, name, status)
+    VALUES ('patient', ?, ?, ?, 'active')
+  `);
+  const created = [];
+  const run = db.transaction(() => {
+    for (const p of SEED_PATIENTS) {
+      if (!exists.get(p.phone)) {
+        insert.run(p.phone, hashPasswordSync(SEED_PASSWORD, ROUNDS), p.name);
+        created.push(p.phone);
+      }
+    }
+  });
+  run();
+  return created;
+}
+
+const seededPatients = seedPatients();
 
 /* ---------- 2.1 种子排班：4 位医生 × 未来 14 天 × 每天 3–4 个时段 ---------- */
 const SLOT_TEMPLATES = [
@@ -604,7 +634,9 @@ module.exports = {
   DB_FILE,
   SEED_PASSWORD,
   SEED_USERS,
+  SEED_PATIENTS,
   seededNow,
+  seededPatients,
   seededSchedules,
   findUserByAccount,
   findUserById,
